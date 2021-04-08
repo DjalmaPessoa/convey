@@ -45,12 +45,12 @@ SE(svytotal(lin_R$lin, des_eusilc))
 svymean (~eqincome, des_eusilc)
 
 # quintile share ratio (qsr) linearization
-S20 <- svyisq(~ eqincome, design = des_eusilc, .20)
+S20 <- svyisq(~ eqincome, design = des_eusilc, .20 , linearized = TRUE )
 S20_val <- coef (S20); attributes (S20_val) <- NULL
-S20_lin <- attr(S20 , "lin" )
-S80 <- svyisq(~ eqincome, design = des_eusilc, .80)
+S20_lin <- attr(S20 , "linearized" )
+S80 <- svyisq(~ eqincome, design = des_eusilc, .80 , linearized = TRUE )
 S80_val <- coef (S80); attributes (S80_val) <- NULL
-S80_lin <- attr(S80 , "lin" )
+S80_lin <- attr(S80 , "linearized" )
 SU <- list (value = S80_val, lin = S80_lin )
 SI <- list (value = S20_val, lin = S20_lin )
 TOT <- list(value = sum( w * eusilc$eqincome) , lin = eusilc$eqincome )

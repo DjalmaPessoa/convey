@@ -2,7 +2,6 @@
 #'
 #' Estimate the median of incomes less than the at-risk-of-poverty threshold (\code{arpt}).
 #'
-#'
 #' @param formula a formula specifying the income variable
 #' @param design a design object of class \code{survey.design} or class \code{svyrep.design} from the \code{survey} library.
 #' @param quantiles income quantile, usually .5 (median)
@@ -21,11 +20,11 @@
 #' @references Guillaume Osier (2009). Variance estimation for complex indicators
 #' of poverty and inequality. \emph{Journal of the European Survey Research
 #' Association}, Vol.3, No.3, pp. 167-195,
-#' ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+#' ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 #'
 #' Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 #' linearization and residual techniques. Survey Methodology, 25, 193-203,
-#' URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+#' URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 #'
 #' @keywords survey
 #'
@@ -85,216 +84,275 @@
 #'
 #' @export
 svypoormed <-
-	function(formula, design, ...) {
+  function(formula, design, ...) {
 
-		if( length( attr( terms.formula( formula ) , "term.labels" ) ) > 1 ) stop( "convey package functions currently only support one variable in the `formula=` argument" )
+    if( length( attr( terms.formula( formula ) , "term.labels" ) ) > 1 ) stop( "convey package functions currently only support one variable in the `formula=` argument" )
 
-		UseMethod("svypoormed", design)
+    UseMethod("svypoormed", design)
 
-	}
+  }
 
 #' @rdname svypoormed
 #' @export
 svypoormed.survey.design <-
-	function(formula, design, quantiles = 0.5, percent = 0.6, na.rm=FALSE, ...) {
+  function(formula, design, quantiles = 0.5, percent = 0.6, na.rm=FALSE, ...) {
 
-		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
+    # test for convey_prep
+    if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
 
-		# if the class of the full_design attribute is just a TRUE, then the design is
-		# already the full design.  otherwise, pull the full_design from that attribute.
-		if ("logical" %in% class(attr(design, "full_design"))) full_design <- design else full_design <- attr(design, "full_design")
+    # if the class of the full_design attribute is just a TRUE, then the design is
+    # already the full design.  otherwise, pull the full_design from that attribute.
+    if ("logical" %in% class(attr(design, "full_design"))) full_design <- design else full_design <- attr(design, "full_design")
 
-		incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
+    # collect domain sample income data
+    incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
-		if(na.rm){
-			nas<-is.na(incvar)
-			design<-design[!nas,]
-			if (length(nas) > length(design$prob)) incvar <- incvar[!nas] else incvar[nas] <- 0
-		}
+    # treat missing values
+    if(na.rm){
+      nas<-is.na(incvar)
+      design<-design[!nas,]
+      if (length(nas) > length(design$prob)) incvar <- incvar[!nas] else incvar[nas] <- 0
+    }
 
-		w <- 1 / design$prob
+    # collect domain weights
+    w <- 1 / design$prob
 
-		if( is.null( names( design$prob ) ) ) ind <- as.character( seq( length( design$prob ) ) ) else ind <- names(design$prob)
+    # treat lengths
+    if( is.null( names( design$prob ) ) ) ind <- as.character( seq( length( design$prob ) ) ) else ind <- names(design$prob)
 
-		N <- sum(w)
+    # domain population size
+    N <- sum(w)
 
-		incvec <- model.frame(formula, full_design$variables, na.action = na.pass)[[1]]
+    # collect full sample income data
+    incvec <- model.frame(formula, full_design$variables, na.action = na.pass)[[1]]
 
-		if(na.rm){
-			nas<-is.na(incvec)
-			full_design<-full_design[!nas,]
-			if (length(nas) > length(full_design$prob)) incvec <- incvec[!nas] else incvec[nas] <- 0
-		}
+    # treat missing values
+    if(na.rm){
+      nas<-is.na(incvec)
+      full_design<-full_design[!nas,]
+      if (length(nas) > length(full_design$prob)) incvec <- incvec[!nas] else incvec[nas] <- 0
+    }
 
-		wf <- 1 / full_design$prob
+    # collect full sample weights
+    wf <- 1 / full_design$prob
 
-		if( is.null( names( full_design$prob ) ) ) ncom <- as.character( seq( length( full_design$prob ) ) ) else ncom <- names(full_design$prob)
+    # collect full sample indices
+    if( is.null( names( full_design$prob ) ) ) ncom <- as.character( seq( length( full_design$prob ) ) ) else ncom <- names(full_design$prob)
 
-		htot <- h_fun(incvar, w)
+    # point estimation
+    htot <- h_fun(incvar, w)
+    ARPT <- svyarpt(formula = formula, full_design, quantiles = quantiles, percent = percent, na.rm = na.rm)
+    arpt <- coef(ARPT)
+    linarpt <- attr(ARPT, "linearized")
 
-		ARPT <- svyarpt(formula = formula, full_design, quantiles = quantiles, percent = percent, na.rm = na.rm)
-		arpt <- coef(ARPT)
+    # treat remaining missing
+    if(is.na(arpt)){
+      rval <- NA
+      variance <- as.matrix( NA )
+      colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+      class(rval) <- c( "cvystat" , "svystat" )
+      attr( rval , "var" ) <- variance
+      attr( rval , "statistic" ) <- "poormed"
+      return( rval )
+    }
 
-		if(is.na(arpt)){
+    # below threshold sample domain
+    nome <- terms.formula(formula)[[2]]
+    dsub <- eval( substitute ( subset(design, incvar <= arpt ) , list( incvar = nome , arpt = as.numeric( arpt ) ) ) )
+    # if( nrow( dsub ) == 0 ) stop( paste("zero records in the set of poor people.  determine the poverty threshold by running svyarpt on ~",nome ) )
+    if( nrow( dsub ) <= 0 ){
+      warning( paste("zero records in the set of poor people.  determine the poverty threshold by running svyarpt on ~",nome ) )
+      rval <- NA
+      variance <- as.matrix( 0 )
+      colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+      class(rval) <- c( "cvystat" , "svystat" )
+      attr( rval , "var" ) <- variance
+      attr(rval, "linearized") <- matrix( NA , nrow = sum( w > 0 ) , ncol = 1 , dimnames = list( names( w )[ w > 0 ] , NULL ) )
+      attr(rval, "index") <- as.numeric( names( w )[ w > 0 ] )
+      attr( rval , "statistic" ) <- "poormed"
+      return( rval )
+    }
 
-			rval <- NA
-			variance <- NA
-			class(rval) <- c( "cvystat" , "svystat" )
-			attr( rval , "var" ) <- variance
-			attr(rval, "lin") <- NA
-			attr( rval , "statistic" ) <- "poormed"
+    # compute median income of the poor
+    # medp <- survey::svyquantile(x = formula, dsub, 0.5, method = "constant", na.rm=na.rm,...) # old
+    ww <- 1 / dsub$prob
+    incvar.top <- model.frame(formula, dsub$variables, na.action = na.pass)[[1]]
+    medp <- computeQuantiles( incvar.top , ww , .5 )
+    medp <- as.vector(medp)
 
-		} else{
+    # add indices
+    if (sum(1/design$prob==0) > 0) ID <- 1*(1/design$prob!=0) else ID <- 1 * ( ncom %in% ind )
 
-			linarpt <- attr(ARPT, "lin")
-			nome <- terms.formula(formula)[[2]]
+    # compute at risk of poverty rate
+    ARPR <- svyarpr( formula=formula, design= design, quantiles, percent, na.rm = na.rm )
+    arpr <- coef( ARPR )
+    ifarpr <- attr( ARPR, "linearized" )[,1]
 
-			dsub <- eval(substitute(subset(design, subset=(incvar <= arpt)),list(incvar = nome, arpt = arpt)))
+    # ensure length
+    if ( length( ifarpr ) != length( full_design$prob ) ) {
+      tmplin <- rep( 0 , nrow( full_design$variables ) )
+      tmplin[ rownames( full_design$variables ) %in% names( ifarpr ) ] <- ifarpr
+      ifarpr <- tmplin ; rm( tmplin )
+      names( ifarpr ) <- rownames( full_design$variables )
+    }
 
-			if( nrow( dsub ) == 0 ) stop( paste("zero records in the set of poor people.  determine the poverty threshold by running svyarpt on ~",nome ) )
+    # compute density
+    Fprimemedp <- densfun(formula = formula, design = design, medp, h = htot, FUN = "F", na.rm = na.rm )
 
-			medp <- survey::svyquantile(x = formula, dsub, 0.5, method = "constant", na.rm=na.rm,...)
+    # linearize cdf of medp
+    ifmedp <- ( 1 / N ) * ID * ( ( incvec <= medp ) - 0.5 * arpr )
 
-			medp <- as.vector(medp)
+    # linearize median of poor
+    linmedp <- ( 0.5 * ifarpr - ifmedp ) / Fprimemedp
 
-			ARPR <- svyarpr(formula=formula, design= design, quantiles, percent, na.rm = na.rm)
+    # ensure length
+    if ( length( linmedp ) != length( full_design$prob ) ) {
+      tmplin <- rep( 0 , nrow( full_design$variables ) )
+      tmplin[ rownames( full_design$variables ) %in% names( linmedp ) ] <- linmedp
+      linmedp <- tmplin ; rm( tmplin )
+      names( linmedp ) <- rownames( full_design$variables )
+    }
 
-			Fprimemedp <- densfun(formula = formula, design = design, medp, h = htot, FUN = "F", na.rm = na.rm)
+    # computte variance
+    variance <- survey::svyrecvar(linmedp/full_design$prob, full_design$cluster, full_design$strata, full_design$fpc, postStrata = full_design$postStrata)
 
-			arpr <- coef(ARPR)
-			ifarpr <- attr(ARPR, "lin")
+    # keep necessary linearized functions
+    linmedp <- linmedp[ 1/full_design$prob > 0 ]
 
-			if (sum(1/design$prob==0) > 0) ID <- 1*(1/design$prob!=0) else
-			 ID <- 1 * ( ncom %in% ind )
+    # coerce to matrix
+    linmedp <- matrix( linmedp , nrow = length( linmedp ) , dimnames = list( names( linmedp ) , strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]] ) )
 
-			# linearize cdf of medp
-			ifmedp <- ( 1 / N ) * ID * ( ( incvec <= medp ) - 0.5 * arpr )
+    # build result object
+    rval <- medp
+    colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+    attr( rval , "var" ) <- variance
+    attr( rval , "statistic" ) <- "poormed"
+    class(rval) <- c( "cvystat" , "svystat" )
+    attr( rval , "linearized" ) <- linmedp
+    attr( rval , "index" ) <- as.numeric( rownames( linmedp ) )
+    rval
 
-			# linearize median of poor
-			linmedp <- ( 0.5 * ifarpr - ifmedp ) / Fprimemedp
-			rval <- medp
-
-			variance <- survey::svyrecvar(linmedp/full_design$prob, full_design$cluster, full_design$strata, full_design$fpc, postStrata = full_design$postStrata)
-
-			colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-			class(rval) <- c( "cvystat" , "svystat" )
-			attr( rval , "var" ) <- variance
-			attr(rval, "lin") <- linmedp
-			attr( rval , "statistic" ) <- "poormed"
-
-		}
-
-		rval
-	}
+  }
 
 
 #' @rdname svypoormed
 #' @export
 svypoormed.svyrep.design <-
-	function(formula, design, quantiles = 0.5, percent = 0.6,na.rm=FALSE, ...) {
+  function(formula, design, quantiles = 0.5, percent = 0.6,na.rm=FALSE, ...) {
 
-		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
+    # check for convey_prep
+    if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
 
-		# if the class of the full_design attribute is just a TRUE, then the design is
-		# already the full design.  otherwise, pull the full_design from that attribute.
-		if ("logical" %in% class(attr(design, "full_design"))) full_design <- design else full_design <- attr(design, "full_design")
+    # if the class of the full_design attribute is just a TRUE, then the design is
+    # already the full design.  otherwise, pull the full_design from that attribute.
+    if ("logical" %in% class(attr(design, "full_design"))) full_design <- design else full_design <- attr(design, "full_design")
 
-		df <- model.frame(design)
-		incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
+    # collect domain sample data
+    df <- model.frame(design)
+    incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
-		if(na.rm){
-			nas<-is.na(incvar)
-			design<-design[!nas,]
-			df <- model.frame(design)
-			incvar <- incvar[!nas]
-		}
+    # treat missing values
+    if(na.rm){
+      nas<-is.na(incvar)
+      design<-design[!nas,]
+      df <- model.frame(design)
+      incvar <- incvar[!nas]
+    }
 
-		ws <- weights(design, "sampling")
+    # collect domain sample weights
+    ws <- weights(design, "sampling")
 
-		df_full <- model.frame(full_design)
-		incvec <- model.frame(formula, full_design$variables, na.action = na.pass)[[1]]
+    # colelct full sample data
+    df_full <- model.frame(full_design)
+    incvec <- model.frame(formula, full_design$variables, na.action = na.pass)[[1]]
 
-		if(na.rm){
-			nas<-is.na(incvec)
-			full_design<-full_design[!nas,]
-			df_full <- model.frame(full_design)
-			incvec <- incvec[!nas]
-		}
+    # treat missing values
+    if(na.rm){
+      nas<-is.na(incvec)
+      full_design<-full_design[!nas,]
+      df_full <- model.frame(full_design)
+      incvec <- incvec[!nas]
+    }
 
-		wsf <- weights(full_design,"sampling")
+    # collect full sample weighst
+    wsf <- weights(full_design,"sampling")
 
-		names(incvec) <- names(wsf) <- row.names(df_full)
-		ind <- row.names(df)
+    # create full sample indices
+    names(incvec) <- names(wsf) <- rownames( full_design$variables )
+    ind <- rownames( full_design$variables ) %in% rownames( design$variables )
 
-		ComputePoormed <-
-			function( xf , wf , ind , quantiles , percent ){
-				tresh <- percent * computeQuantiles(xf, wf, p = quantiles)
-				x<-xf[ind]
-				w<- wf[ind]
-				indpoor <- (x <= tresh)
-				medp <- computeQuantiles(x[indpoor], w[indpoor], p = 0.5)
-				medp
-			}
+    # computation function
+    ComputePoormed <-
+      function( xf , wf , ind , quantiles , percent ){
+        tresh <- percent * computeQuantiles(xf, wf, p = quantiles)
+        x <-xf[ind]
+        w <- wf[ind]
+        indpoor <- (x <= tresh)
+        medp <- computeQuantiles( x[indpoor], w[indpoor], p = 0.5 )
+        medp
+      }
 
-		ws <- weights(design, "sampling")
-		rval <- ComputePoormed(xf = incvec, wf=wsf, ind= ind, quantiles = quantiles, percent = percent)
+    # compute point estimate
+    rval <- ComputePoormed(xf = incvec, wf=wsf, ind= ind, quantiles = quantiles, percent = percent)
 
-		wwf <- weights(full_design, "analysis")
-		qq <-
-			apply(
-				wwf,
-				2,
-				function(wi){
-					names(wi)<- row.names(df_full)
-					ComputePoormed(incvec, wi, ind=ind, quantiles = quantiles,percent = percent)
-				}
-			)
+    # collect domain sample weights
+    ws <- weights(design, "sampling")
 
-		if(sum(is.na(qq))==length(qq))variance <- NA else variance <- survey::svrVar(qq, design$scale, design$rscales, mse = design$mse, coef = rval)
+    # collect full sample analysis weights
+    wwf <- weights(full_design, "analysis")
 
-		variance <- as.matrix( variance )
+    # compute replicates
+    qq <- apply( wwf , 2 , function( wi ) {
+      names( wi ) <- rownames( df_full$variables )
+      ComputePoormed( incvec , wi , ind=ind , quantiles = quantiles , percent = percent )
+    } )
 
-		colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-		class(rval) <- c( "cvystat" , "svrepstat" )
-		attr(rval, "var") <- variance
-		attr(rval, "statistic") <- "poormed"
+    # compute variance
+    variance <- if ( all( is.na( qq ) ) ) NA else survey::svrVar(qq, design$scale, design$rscales, mse = design$mse, coef = rval)
+    variance <- as.matrix( variance )
+    colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
 
-		rval
-	}
+    # build result object
+    class(rval) <- c( "cvystat" , "svrepstat" )
+    attr(rval, "var") <- variance
+    attr(rval, "statistic") <- "poormed"
+    rval
+
+  }
 
 #' @rdname svypoormed
 #' @export
 svypoormed.DBIsvydesign <-
-	function (formula, design, ...){
+  function (formula, design, ...){
 
-		if (!( "logical" %in% class(attr(design, "full_design"))) ){
+    if (!( "logical" %in% class(attr(design, "full_design"))) ){
 
-			full_design <- attr( design , "full_design" )
+      full_design <- attr( design , "full_design" )
 
-			full_design$variables <-
-				getvars(
-					formula,
-					attr( design , "full_design" )$db$connection,
-					attr( design , "full_design" )$db$tablename,
-					updates = attr( design , "full_design" )$updates,
-					subset = attr( design , "full_design" )$subset
-				)
+      full_design$variables <-
+        getvars(
+          formula,
+          attr( design , "full_design" )$db$connection,
+          attr( design , "full_design" )$db$tablename,
+          updates = attr( design , "full_design" )$updates,
+          subset = attr( design , "full_design" )$subset
+        )
 
-			attr( design , "full_design" ) <- full_design
+      attr( design , "full_design" ) <- full_design
 
-			rm( full_design )
+      rm( full_design )
 
-		}
+    }
 
-		design$variables <-
-			getvars(
-				formula,
-				design$db$connection,
-				design$db$tablename,
-				updates = design$updates,
-				subset = design$subset
-			)
+    design$variables <-
+      getvars(
+        formula,
+        design$db$connection,
+        design$db$tablename,
+        updates = design$updates,
+        subset = design$subset
+      )
 
-		NextMethod("svypoormed", design)
-	}
+    NextMethod("svypoormed", design)
+  }
 

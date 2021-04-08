@@ -5,13 +5,21 @@
 \alias{svyjdiv.survey.design}
 \alias{svyjdiv.svyrep.design}
 \alias{svyjdiv.DBIsvydesign}
-\title{J-divergence measure (EXPERIMENTAL)}
+\title{J-divergence measure}
 \usage{
 svyjdiv(formula, design, ...)
 
-\method{svyjdiv}{survey.design}(formula, design, na.rm = FALSE, ...)
+\method{svyjdiv}{survey.design}(formula, design, na.rm = FALSE, deff = FALSE, linearized = FALSE, ...)
 
-\method{svyjdiv}{svyrep.design}(formula, design, na.rm = FALSE, ...)
+\method{svyjdiv}{svyrep.design}(
+  formula,
+  design,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
+  ...
+)
 
 \method{svyjdiv}{DBIsvydesign}(formula, design, ...)
 }
@@ -23,12 +31,18 @@ svyjdiv(formula, design, ...)
 \item{...}{future expansion}
 
 \item{na.rm}{Should cases with missing values be dropped?}
+
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
 }
 \description{
-Estimate the j-divergence measure, an entropy-based measure of inequality
+Estimate the J-divergence measure, an entropy-based measure of inequality
 }
 \details{
 you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
@@ -95,7 +109,7 @@ dbDisconnect( conn , shutdown = TRUE )
 \references{
 Nicholas Rohde (2016). J-divergence measurements of economic inequality.
 J. R. Statist. Soc. A, v. 179, Part 3 (2016), pp. 847-870.
-URL \url{https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/rssa.12153}.
+URL \url{http://onlinelibrary.wiley.com/doi/10.1111/rssa.12153/abstract}.
 
 Martin Biewen and Stephen Jenkins (2002). Estimation of Generalized Entropy
 and Atkinson Inequality Indices from Complex Survey Data. \emph{DIW Discussion Papers},

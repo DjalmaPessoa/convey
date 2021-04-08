@@ -5,13 +5,31 @@
 \alias{svyjdivdec.survey.design}
 \alias{svyjdivdec.svyrep.design}
 \alias{svyjdivdec.DBIsvydesign}
-\title{J-Divergence Decomposition (EXPERIMENTAL)}
+\title{J-Divergence Decomposition}
 \usage{
 svyjdivdec(formula, subgroup, design, ...)
 
-\method{svyjdivdec}{survey.design}(formula, subgroup, design, na.rm = FALSE, ...)
+\method{svyjdivdec}{survey.design}(
+  formula,
+  subgroup,
+  design,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
+  ...
+)
 
-\method{svyjdivdec}{svyrep.design}(formula, subgroup, design, na.rm = FALSE, ...)
+\method{svyjdivdec}{svyrep.design}(
+  formula,
+  subgroup,
+  design,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
+  ...
+)
 
 \method{svyjdivdec}{DBIsvydesign}(formula, subgroup, design, ...)
 }
@@ -25,6 +43,12 @@ svyjdivdec(formula, subgroup, design, ...)
 \item{...}{future expansion}
 
 \item{na.rm}{Should cases with missing values be dropped? Observations containing missing values in income or group variables will be dropped.}
+
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvydstat}", which are vectors with a "\code{var}" attribute giving the variance-covariance matrix and a "\code{statistic}" attribute giving the name of the statistic.
@@ -106,13 +130,13 @@ dbDisconnect( conn , shutdown = TRUE )
 
 }
 \references{
-Anthony F. Shorrocks (1984). Inequality decomposition
-by population subgroups. \emph{Econometrica}, v. 52, n. 6, 1984, pp. 1369-1385.
-URL \url{https://www.jstor.org/stable/1913511}.
+Anthony F. Shorrocks (1984). Inequality decomposition by population subgroups.
+\emph{Econometrica}, v. 52, n. 6, 1984, pp. 1369-1385.
+URL \url{http://www.jstor.org/stable/1913511}.
 
 Nicholas Rohde (2016). J-divergence measurements of economic inequality.
-J. R. Statist. Soc. A, v. 179, Part 3 (2016), pp. 847-870.
-URL \url{https://rss.onlinelibrary.wiley.com/doi/abs/10.1111/rssa.12153}.
+\emph{J. R. Statist. Soc. A}, v. 179, Part 3 (2016), pp. 847-870.
+URL \url{http://onlinelibrary.wiley.com/doi/10.1111/rssa.12153/abstract}.
 
 Martin Biewen and Stephen Jenkins (2002). Estimation of Generalized Entropy
 and Atkinson Inequality Indices from Complex Survey Data. \emph{DIW Discussion Papers},

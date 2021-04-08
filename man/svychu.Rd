@@ -5,7 +5,7 @@
 \alias{svychu.survey.design}
 \alias{svychu.svyrep.design}
 \alias{svychu.DBIsvydesign}
-\title{CHU class of poverty measures (EXPERIMENTAL)}
+\title{CHU measure of poverty}
 \usage{
 svychu(formula, design, ...)
 
@@ -17,21 +17,26 @@ svychu(formula, design, ...)
   abs_thresh = NULL,
   percent = 0.6,
   quantiles = 0.5,
-  na.rm = FALSE,
   thresh = FALSE,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
   ...
 )
 
 \method{svychu}{svyrep.design}(
   formula,
   design,
-  g,
+  g = 0.5,
   type_thresh = "abs",
   abs_thresh = NULL,
   percent = 0.6,
   quantiles = 0.5,
-  na.rm = FALSE,
   thresh = FALSE,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
   ...
 )
 
@@ -44,7 +49,7 @@ svychu(formula, design, ...)
 
 \item{...}{passed to \code{svyarpr} and \code{svyarpt}}
 
-\item{g}{A parameter where (1 - g) defines the inequality aversion among the poor. If g = 0, the CHU class becomes a monotonic transform of the Watts poverty measure.}
+\item{g}{If g=0 estimates the headcount ratio; If g=1 estimates the average normalised poverty gap, and if g=2 estimates the average squared normalised poverty gap}
 
 \item{type_thresh}{type of poverty threshold. If "abs" the threshold is fixed and given the value
 of abs_thresh; if "relq" it is given by percent times the quantile; if "relm" it is percent times the mean.}
@@ -55,21 +60,27 @@ of abs_thresh; if "relq" it is given by percent times the quantile; if "relm" it
 
 \item{quantiles}{the quantile used used in the poverty threshold definition}
 
+\item{thresh}{return the poverty threshold value}
+
 \item{na.rm}{Should cases with missing values be dropped?}
 
-\item{thresh}{return the poverty threshold value}
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
 }
 \description{
-Estimate the Clark, Hemming and Ulph (1981) class of poverty measures
+Estimate the CHU measure.
 }
 \details{
 you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
-}
-\note{
-This function is experimental and is subject to change in later versions.
+
+The Clark-Hemming-Ulph class used here is mentioned in Zheng (2001) as the Chakravarty (1983) version of the CHU class, based on the ratio between the income of the poor and the poverty threshold,
+using the parameter \code{g} to "weight" these ratios.
 }
 \examples{
 library(survey)
@@ -85,20 +96,19 @@ des_eusilc <- convey_prep( des_eusilc )
 des_eusilc_rep <- as.svrepdesign( des_eusilc , type = "bootstrap" )
 des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
-# absolute poverty threshold
-svychu(~eqincome, des_eusilc, g=1,  abs_thresh=10000)
+# poverty threshold fixed
+svychu(~eqincome, des_eusilc , abs_thresh=10000 , g = .5 )
 # poverty threshold equal to arpt
-svychu(~eqincome, des_eusilc, g=1, type_thresh= "relq" , thresh = TRUE)
+svychu(~eqincome, des_eusilc , g = .5 , type_thresh= "relq", thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svychu(~eqincome, des_eusilc, g=1, type_thresh= "relm" , thresh = TRUE)
-
-#  using svrep.design:
-# absolute poverty threshold
-svychu(~eqincome, des_eusilc_rep, g=1,  abs_thresh=10000)
+svychu(~eqincome, des_eusilc , g = .5 , type_thresh= "relm" , thresh = TRUE)
+# using svrep.design:
+# poverty threshold fixed
+svychu(~eqincome, des_eusilc_rep , g = .5 , abs_thresh=10000)
 # poverty threshold equal to arpt
-svychu(~eqincome, des_eusilc_rep, g=1, type_thresh= "relq" , thresh = TRUE)
+svychu(~eqincome, des_eusilc_rep , g = .5 , type_thresh= "relq", thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svychu(~eqincome, des_eusilc_rep, g=1, type_thresh= "relm" , thresh = TRUE)
+svychu(~eqincome, des_eusilc_rep , g = .5 , type_thresh= "relm" , thresh = TRUE)
 
 \dontrun{
 
@@ -122,12 +132,12 @@ dbd_eusilc <-
 
 dbd_eusilc <- convey_prep( dbd_eusilc )
 
-# absolute poverty threshold
-svychu(~eqincome, dbd_eusilc, g=1,  abs_thresh=10000)
+# poverty threshold fixed
+svychu(~eqincome, dbd_eusilc , g = .5 , abs_thresh=10000 )
 # poverty threshold equal to arpt
-svychu(~eqincome, dbd_eusilc, g=1, type_thresh= "relq" , thresh = TRUE)
+svychu(~eqincome, dbd_eusilc , g = .5 , type_thresh= "relq", thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svychu(~eqincome, dbd_eusilc, g=1, type_thresh= "relm" , thresh = TRUE)
+svychu(~eqincome, dbd_eusilc , g = .5 , type_thresh= "relm" , thresh = TRUE)
 
 dbRemoveTable( conn , 'eusilc' )
 
@@ -137,27 +147,37 @@ dbDisconnect( conn , shutdown = TRUE )
 
 }
 \references{
-Vijay Verma and Gianni Betti (2011). Taylor linearization sampling errors and design effects for poverty measures
-and other complex statistics. \emph{Journal Of Applied Statistics}, Vol.38, No.8, pp. 1549-1576,
-<doi:10.1080/02664763.2010.515674>
-
-Anthony B. Atkinson (1987). On the measurement of poverty.
-\emph{Econometrica}, Vol.55, No.4, (Jul., 1987), pp. 749-764,
-URL \url{https://www.jstor.org/stable/1911028}.
+Satya R. Chakravarty (1983). A new index of poverty. \emph{Mathematical Social Sciences},
+Vol. 6 , No. 3, pp. 307-313.
 
 Stephen Clark, Richard Hemming and David Ulph (1981). On Indices
 for the Measurement of Poverty. \emph{The Economic Journal}, Vol.91, No.362, (Jun., 1981), pp. 515-526,
-URL \url{https://www.jstor.org/stable/2232600}.
+URL \url{http://www.jstor.org/stable/2232600}.
+
+Buhong Zheng (2001). Statistical inference for poverty measures with relative poverty lines.
+\emph{Journal of Econometrics}, Vol. 101, pp. 337-356.
+
+Vijay Verma and Gianni Betti (2011). Taylor linearization sampling errors and design effects for poverty measures
+and other complex statistics. \emph{Journal Of Applied Statistics}, Vol.38, No.8, pp. 1549-1576,
+URL \url{http://dx.doi.org/10.1080/02664763.2010.515674}.
+
+Anthony B. Atkinson (1987). On the measurement of poverty.
+\emph{Econometrica}, Vol.55, No.4, (Jul., 1987), pp. 749-764,
+URL \url{http://www.jstor.org/stable/1911028}.
 
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+
+Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
+linearization and residual techniques. Survey Methodology, 25, 193-203,
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
-\code{\link{svywatts}}
+\code{\link{svyarpt}}
 }
 \author{
-Guilherme Jacob, Djalma Pessoa and Anthony Damico
+Guilherme Jacob
 }
 \keyword{survey}

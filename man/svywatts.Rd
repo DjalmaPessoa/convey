@@ -5,7 +5,7 @@
 \alias{svywatts.survey.design}
 \alias{svywatts.svyrep.design}
 \alias{svywatts.DBIsvydesign}
-\title{Watts poverty index (EXPERIMENTAL)}
+\title{Watts measure of poverty}
 \usage{
 svywatts(formula, design, ...)
 
@@ -16,8 +16,10 @@ svywatts(formula, design, ...)
   abs_thresh = NULL,
   percent = 0.6,
   quantiles = 0.5,
-  na.rm = FALSE,
   thresh = FALSE,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
   ...
 )
 
@@ -28,8 +30,11 @@ svywatts(formula, design, ...)
   abs_thresh = NULL,
   percent = 0.6,
   quantiles = 0.5,
-  na.rm = FALSE,
   thresh = FALSE,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
   ...
 )
 
@@ -51,21 +56,24 @@ of abs_thresh; if "relq" it is given by percent times the quantile; if "relm" it
 
 \item{quantiles}{the quantile used used in the poverty threshold definition}
 
+\item{thresh}{return the poverty threshold value}
+
 \item{na.rm}{Should cases with missing values be dropped?}
 
-\item{thresh}{return the poverty threshold value}
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
 }
 \description{
-Estimate the Watts (1968) poverty measure
+Estimate the Watts measure for the cases: \code{alpha=0} headcount ratio and \code{alpha=1} poverty gap index.
 }
 \details{
 you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
-}
-\note{
-This function is experimental and is subject to change in later versions.
 }
 \examples{
 library(survey)
@@ -81,20 +89,23 @@ des_eusilc <- convey_prep( des_eusilc )
 des_eusilc_rep <- as.svrepdesign( des_eusilc , type = "bootstrap" )
 des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
-# absolute poverty threshold
-svywatts(~eqincome, des_eusilc, abs_thresh=10000)
-# poverty threshold equal to arpt
-svywatts(~eqincome, des_eusilc, type_thresh= "relq" , thresh = TRUE)
-# poverty threshold equal to 0.6 times the mean
-svywatts(~eqincome, des_eusilc, type_thresh= "relm" , thresh = TRUE)
+# filter positive incomes
+des_eusilc <- subset( des_eusilc , eqincome > 0 )
+des_eusilc_rep <- subset( des_eusilc_rep , eqincome > 0 )
 
-#  using svrep.design:
-# absolute poverty threshold
-svywatts(~eqincome, des_eusilc_rep, abs_thresh=10000)
+# poverty threshold fixed
+svywatts(~eqincome, des_eusilc ,  abs_thresh=10000)
 # poverty threshold equal to arpt
-svywatts(~eqincome, des_eusilc_rep, type_thresh= "relq" , thresh = TRUE)
+svywatts(~eqincome, des_eusilc , type_thresh= "relq", thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svywatts(~eqincome, des_eusilc_rep, type_thresh= "relm" , thresh = TRUE)
+svywatts(~eqincome, des_eusilc , type_thresh= "relm" , thresh = TRUE)
+# using svrep.design:
+# poverty threshold fixed
+svywatts(~eqincome, des_eusilc_rep  ,  abs_thresh=10000)
+# poverty threshold equal to arpt
+svywatts(~eqincome, des_eusilc_rep  , type_thresh= "relq", thresh = TRUE)
+# poverty threshold equal to 0.6 times the mean
+svywatts(~eqincome, des_eusilc_rep  , type_thresh= "relm" , thresh = TRUE)
 
 \dontrun{
 
@@ -118,12 +129,12 @@ dbd_eusilc <-
 
 dbd_eusilc <- convey_prep( dbd_eusilc )
 
-# absolute poverty threshold
-svywatts(~eqincome, dbd_eusilc, abs_thresh=10000)
+# poverty threshold fixed
+svywatts(~eqincome, dbd_eusilc ,  abs_thresh=10000)
 # poverty threshold equal to arpt
-svywatts(~eqincome, dbd_eusilc, type_thresh= "relq" , thresh = TRUE)
+svywatts(~eqincome, dbd_eusilc , type_thresh= "relq", thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svywatts(~eqincome, dbd_eusilc, type_thresh= "relm" , thresh = TRUE)
+svywatts(~eqincome, dbd_eusilc , type_thresh= "relm" , thresh = TRUE)
 
 dbRemoveTable( conn , 'eusilc' )
 
@@ -137,19 +148,30 @@ Harold W. Watts (1968). An economic definition of poverty.
 \emph{Institute For Research on Poverty Discussion Papers}, n.5.
 University of Wisconsin. URL \url{https://www.irp.wisc.edu/publications/dps/pdfs/dp568.pdf}.
 
+Buhong Zheng (2001). Statistical inference for poverty measures with relative poverty lines.
+\emph{Journal of Econometrics}, Vol. 101, pp. 337-356.
+
+Vijay Verma and Gianni Betti (2011). Taylor linearization sampling errors and design effects for poverty measures
+and other complex statistics. \emph{Journal Of Applied Statistics}, Vol.38, No.8, pp. 1549-1576,
+URL \url{http://dx.doi.org/10.1080/02664763.2010.515674}.
+
+Anthony B. Atkinson (1987). On the measurement of poverty.
+\emph{Econometrica}, Vol.55, No.4, (Jul., 1987), pp. 749-764,
+URL \url{http://www.jstor.org/stable/1911028}.
+
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 
 Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 linearization and residual techniques. Survey Methodology, 25, 193-203,
-URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
 \code{\link{svyarpt}}
 }
 \author{
-Guilherme Jacob, Djalma Pessoa and Anthony Damico
+Guilherme Jacob
 }
 \keyword{survey}

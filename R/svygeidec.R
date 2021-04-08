@@ -1,4 +1,4 @@
-#' Generalized entropy index Decomposition
+#' Generalized Entropy Index Decomposition
 #'
 #' Estimates the group decomposition of the generalized entropy index
 #'
@@ -7,6 +7,9 @@
 #' @param design a design object of class \code{survey.design} or class \code{svyrep.design} from the \code{survey} library.
 #' @param epsilon a parameter that determines the sensivity towards inequality in the top of the distribution. Defaults to epsilon = 1.
 #' @param na.rm Should cases with missing values be dropped? Observations containing missing values in income or group variables will be dropped.
+#' @param deff Return the design effect (see \code{survey::svymean})
+#' @param linearized Should a matrix of linearized variables be returned
+#' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'
 #' @details you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
@@ -19,9 +22,9 @@
 #'
 #' @seealso \code{\link{svygei}}
 #'
-#' @references Anthony F. Shorrocks (1984). Inequality decomposition
-#' groups population subgroups. \emph{Econometrica}, v. 52, n. 6, 1984, pp. 1369-1385.
-#' URL \url{https://www.jstor.org/stable/1913511}.
+#' @references Anthony F. Shorrocks (1984). Inequality decomposition groups population subgroups.
+#' \emph{Econometrica}, v. 52, n. 6, 1984, pp. 1369-1385.
+#' URL \url{http://www.jstor.org/stable/1913511}.
 #'
 #' Martin Biewen and Stephen Jenkins (2002). Estimation of Generalized Entropy
 #' and Atkinson Inequality Indices from Complex Survey Data. \emph{DIW Discussion Papers},
@@ -117,11 +120,9 @@
 svygeidec <-
   function( formula, subgroup, design,  ...) {
 
-    if( length( attr( terms.formula( formula ) , "term.labels" ) ) > 1 ) stop( "convey package functions currently only support one variable in the `formula=` argument" )
-
     if( length( attr( terms.formula( subgroup ) , "term.labels" ) ) > 1 ) stop( "convey package functions currently only support one variable in the `subgroup=` argument" )
 
-    #if( 'epsilon' %in% names( list(...) ) && list(...)[["epsilon"]] < 0 ) stop( "epsilon= cannot be negative." )
+    # if( 'epsilon' %in% names( list(...) ) && list(...)[["epsilon"]] < 0 ) stop( "epsilon= cannot be negative." )
 
     UseMethod("svygeidec", design)
 
@@ -130,231 +131,143 @@ svygeidec <-
 #' @rdname svygeidec
 #' @export
 svygeidec.survey.design <-
-  function ( formula, subgroup, design, epsilon = 1, na.rm = FALSE, ... ) {
+  function ( formula, subgroup, design, epsilon = 1, na.rm = FALSE, deff = FALSE , linearized = FALSE , ... ) {
 
-    w <- 1/design$prob
+    # collect data
     incvar <- model.frame(formula, design$variables, na.action = na.pass)[,]
-    grpvar <- model.frame( subgroup, design$variables, na.action = na.pass)[,]
+    grpvar <- model.frame( subgroup, design$variables, na.action = na.pass , drop.unused.levels = TRUE)[,]
 
+    # check types
     if ( class(grpvar) == "labelled" ) {
       stop( "This function does not support 'labelled' variables. Try factor().")
     }
 
+    # treat missing values
     if (na.rm) {
       nas <- ( is.na(incvar) | is.na(grpvar ) )
-      design <- design[nas == 0, ]
-      w <- 1/design$prob
+      design <- design[!nas, ]
+      incvar <- model.frame(formula, design$variables, na.action = na.pass)[,]
+      grpvar <- model.frame( subgroup, design$variables, na.action = na.pass , drop.unused.levels = TRUE)[,]
     }
 
+    # collect sampling weights
+    w <- 1/design$prob
 
-    if ( any( incvar[ w > 0 ] <= 0, na.rm = TRUE) ) stop( paste("the GEI is undefined for incomes <= 0 if epsilon ==", epsilon) )
+    # check for strictly positive incomes
+    if ( any(incvar[w != 0] <= 0,na.rm = TRUE) ) stop( "The GEI indices are defined for strictly positive variables only.\nNegative and zero values not allowed." )
 
-    if ( any( ( is.na(incvar) | is.na(grpvar ) ) & w > 0 ) ) {
-
-      rval <- list( estimate = matrix( c( NA, NA, NA ), dimnames = list( c( "total", "within", "between" ) ) )[,] )
-      names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-      attr(rval, "var") <- matrix( rep(NA,9), ncol = 3, dimnames = list( c( "total", "within", "between" ), c( "total", "within", "between" ) ) )[,]
-      attr(rval, "statistic") <- "gei decomposition"
-      attr(rval,"epsilon")<- epsilon
-      attr(rval,"group")<- as.character( subgroup )[[2]]
-      class(rval) <- c( "cvydstat" , "cvystat" , "svystat" )
-
-      return(rval)
-
-    }
-
+    # add interaction
     grpvar <- interaction( grpvar )
 
     # total
-    ttl.gei <- calc.gei( x = incvar, weights = w, epsilon = epsilon )
+    ttl.gei <- CalcGEI( x = incvar, weights = w, epsilon = epsilon )
 
-    if ( epsilon == 0 ){
-      ttl.lin <-
-        -U_fn( incvar , w , 0 )^( -1 ) *
-        log( incvar ) +
-        U_fn( incvar , w ,  1 )^( -1 ) *
-        incvar +
-        U_fn( incvar , w , 0 )^( -1 ) *
-        (
-          T_fn( incvar , w , 0 ) *
-            U_fn( incvar , w , 0 )^( -1 ) - 1
-        )
+    # compute linearized function
+    ttl.lin <- CalcGEI_IF( x = incvar, weights = w, epsilon = epsilon )
 
-    } else if ( epsilon == 1) {
+    # treat domain
+    ttl.lin <- ttl.lin[ pmatch( names( w ) , names( ttl.lin ) ) ]
+    names( ttl.lin ) <- names( w )
+    ttl.lin[ w<=0 ] <- 0
 
-      ttl.lin <-
-        U_fn( incvar , w , 1 )^( -1 ) * incvar * log( incvar ) -
-        U_fn( incvar , w , 1 )^( -1 ) * ( T_fn( incvar , w , 1 ) * U_fn( incvar , w, 1 )^( -1 ) + 1 ) * incvar +
-        U_fn( incvar , w , 0 )^( -1 )
+    # create matrix of group-specific weights
+    wg <- sapply( levels(grpvar) , function(z) ifelse( grpvar == z , w , 0 ) )
 
-    } else {
+    # calculate group-specific GEI and linearized functions
+    grp.gei <- lapply( colnames( wg )  , function( this.group ) {
+      wi <- wg[ , this.group ]
+      statobj <- list(
+        value = CalcGEI( x = incvar, weights = wi , epsilon = epsilon ) ,
+        lin = CalcGEI_IF( x = incvar, weights = wi , epsilon = epsilon ) )
+      lin2 <- rep( 0 , length( wi ) )
+      lin2[ wi > 0 ] <- statobj$lin
+      statobj$lin <- lin2
+      statobj
+    } )
+    names( grp.gei ) <- colnames( wg )
 
-      ttl.lin <-
-        ( epsilon )^( -1 ) *
-        U_fn( incvar , w , epsilon ) *
-        U_fn( incvar , w , 1 )^( -epsilon ) *
-        U_fn( incvar , w , 0 )^( epsilon - 2 ) -
+    # calculate within component weight
+    grp.gei.wgt <- lapply( colnames( wg ) , function(i) {
 
-        ( epsilon - 1 )^( -1 ) *
-        U_fn( incvar , w , epsilon ) *
-        U_fn( incvar , w , 1 )^( -epsilon -1 ) *
-        U_fn( incvar , w , 0 )^( epsilon - 1 ) * incvar +
-
-        ( epsilon^2 - epsilon )^( -1 ) *
-        U_fn( incvar , w , 0 )^( epsilon - 1 ) *
-        U_fn( incvar , w , 1 )^( -epsilon ) *
-        incvar^(epsilon)
-
-    }
-
-    ttl.lin [ w == 0 ] <- 0
-
-    ttl.variance <- survey::svyrecvar(ttl.lin/design$prob, design$cluster,design$strata, design$fpc, postStrata = design$postStrata)
-
-    # within:
-    grp.gei <- NULL
-    grp.lin <- matrix( NA, nrow = length(incvar), ncol = length( levels( grpvar ) ) )
-    grp.U_0 <- NULL
-    grp.U_0.lin <- matrix( NA, nrow = length(incvar), ncol = length( levels( grpvar ) ) )
-    grp.U_1 <- NULL
-    grp.U_1.lin <- matrix( NA, nrow = length(incvar), ncol = length( levels( grpvar ) ) )
-    grp.p <- NULL
-    grp.p.lin <- matrix( NA, nrow = length(incvar), ncol = length( levels( grpvar ) ) )
-    grp.g <- NULL
-    grp.g.lin <- matrix( NA, nrow = length(incvar), ncol = length( levels( grpvar ) ) )
-
-
-    for ( i in seq_along( levels(grpvar) ) ) {
-      w_i <- w
-      w_i[ grpvar != levels(grpvar)[i] ] <- 0
-
-      grp.gei[i] <- calc.gei( x = incvar, weights = w_i, epsilon = epsilon )
-
-      grp.U_0[i] <- sum( w_i )
-      grp.U_0.lin[ , i] <- ifelse( w_i > 0 , 1 , 0 )
-
-      grp.U_1[i] <- sum( incvar[ w_i > 0 ] * w_i[ w_i > 0 ] )
-      grp.U_1.lin[,i] <- ifelse( w_i > 0 , incvar , 0)
-
-      U_0_i <- list( value = grp.U_0[i] , lin = grp.U_0.lin[,i] )
-      U_0 <- list( value = sum( w ) , lin = rep( 1 , length(incvar) ) )
-      list_all <- list( U_0_i = U_0_i, U_0 = U_0 )
-      grp.est <- contrastinf( quote( U_0_i / U_0 ) , list_all )
-      grp.p[i] <- grp.est$value
-      grp.p.lin[ , i ] <- grp.est$lin
-      rm(grp.est)
-
-
-      U_1_i <- list( value = grp.U_1[i] , lin = grp.U_1.lin[,i] )
-      U_1 <- list( value = sum( incvar[ w > 0 ] * w[ w > 0 ] ) , lin = incvar )
-      list_all <- list( U_0_i = U_0_i, U_0 = U_0, U_1_i = U_1_i, U_1 = U_1 )
-      grp.est <- contrastinf( quote( (U_0_i / U_0) * ( U_1_i / U_0_i ) / ( U_1 / U_0 ) ) , list_all )
-      grp.g[i] <- grp.est$value
-      grp.g.lin[ , i ] <- ifelse( w_i > 0 , grp.est$lin , 0 )
-      grp.g.lin[ , i ] <- grp.est$lin
-      rm(grp.est)
-
-
-      if ( epsilon == 0 ){
-        grp.lin [ , i ] <-
-          ifelse( w_i > 0 ,
-                  -U_fn( incvar , w_i , 0 )^( -1 ) * log( incvar ) +
-                    U_fn( incvar , w_i ,  1 )^( -1 ) * incvar +
-                    U_fn( incvar , w_i , 0 )^( -1 ) * ( T_fn( incvar , w_i , 0 ) * U_fn( incvar , w_i , 0 )^( -1 ) - 1 ) ,
-                  0 )
-
-      } else if ( epsilon == 1) {
-
-        grp.lin[ , i ] <-
-          ifelse( w_i > 0 ,
-                  U_fn( incvar , w_i , 1 )^( -1 ) * incvar * log( incvar ) -
-                    U_fn( incvar , w_i , 1 )^( -1 ) * ( T_fn( incvar , w_i , 1 ) * U_fn( incvar , w_i, 1 )^( -1 ) + 1 ) * incvar +
-                    U_fn( incvar , w_i , 0 )^( -1 ) ,
-                  0 )
-
-      } else {
-
-        grp.lin[ , i ] <-
-          ifelse( w_i > 0 ,
-                  ( epsilon )^( -1 ) *
-                    U_fn( incvar , w_i , epsilon ) *
-                    U_fn( incvar , w_i , 1 )^( -epsilon ) *
-                    U_fn( incvar , w_i , 0 )^( epsilon - 2 ) -
-
-                    ( epsilon - 1 )^( -1 ) *
-                    U_fn( incvar , w_i , epsilon ) *
-                    U_fn( incvar , w_i , 1 )^( -epsilon -1 ) *
-                    U_fn( incvar , w_i , 0 )^( epsilon - 1 ) * incvar +
-
-                    ( epsilon^2 - epsilon )^( -1 ) *
-                    U_fn( incvar , w_i , 0 )^( epsilon - 1 ) *
-                    U_fn( incvar , w_i , 1 )^( -epsilon ) *
-                    incvar^(epsilon) ,
-                  0 )
-
-      }
-      rm(i, w_i)
-    }
-
-    # finish within
-    wtd.gei <- NULL
-    wtd.gei.lin <- matrix( NA, nrow = length(incvar), ncol = length( levels( grpvar ) ) )
-    for ( i in seq_along( levels(grpvar) ) ) {
-      w_i <- w
-      w_i[ grpvar != levels(grpvar)[i] ] <- 0
-
-      g_i <- list( value = grp.g[i] , lin = grp.g.lin[,i] )
-      p_i <- list( value = grp.p[i] , lin = grp.p.lin[,i] )
-      gei_i <- list( value = grp.gei[i] , lin = grp.lin[,i] )
-      list_all <- list( g_i = g_i, p_i = p_i, gei_i = gei_i, epsilon = list( value = epsilon , lin = rep( 0, length( incvar ) ) ) )
+      wi <- wg[,i]
 
       if ( epsilon == 0 ) {
-
-        grp.est <- contrastinf( quote( p_i * gei_i ) , list_all )
-        wtd.gei[i] <- grp.est$value
-        wtd.gei.lin[ , i ] <- ifelse( w_i > 0 , grp.est$lin , 0 )
-        rm(grp.est)
-
+        this.linformula <- quote( ( N.g / N ) )
       } else if ( epsilon == 1 ) {
-
-        grp.est <- contrastinf( quote( g_i * gei_i ) , list_all )
-        wtd.gei[i] <- grp.est$value
-        wtd.gei.lin[ , i ] <- ifelse( w_i > 0 , grp.est$lin , 0 )
-        rm(grp.est)
-
+        this.linformula <- quote( ( Y.g / Y ) )
       } else {
-
-        grp.est <- contrastinf( quote( g_i^epsilon * p_i^(1-epsilon) * gei_i ) , list_all )
-        wtd.gei[i] <- grp.est$value
-        wtd.gei.lin[ , i ] <- ifelse( w_i > 0 , grp.est$lin , 0 )
-        rm(grp.est)
-
+        this.linformula <- substitute( quote( ( ( Y.g / Y )^epsilon ) * ( ( N.g / N )^( 1 - epsilon ) ) ) , list( epsilon = epsilon ) )
+        this.linformula <- eval( this.linformula )
       }
 
+      contrastinf(
+        this.linformula ,
+        list( Y.g = list( value = sum( incvar * wi , na.rm = TRUE ) , lin = incvar * ( wi > 0 ) ) ,
+              Y = list( value = sum( incvar * w , na.rm = TRUE ) , lin = incvar * ( w > 0 ) ) ,
+              N.g = list( value = sum( wi , na.rm = TRUE ) , lin = ( wi > 0 ) ) ,
+              N = list( value = sum( w , na.rm = TRUE ) , lin = ( w > 0 ) ) ) )
 
-    }
+    } )
+    names( grp.gei.wgt ) <- colnames( wg )
 
-    wtn.gei <- sum(wtd.gei)
-    within.lin <- apply(wtd.gei.lin,1,sum)
+    # calculate within component weight
+    gei.within.components <-
+      list(
+        value = sapply( grp.gei.wgt , `[[` , "value" ) * sapply( grp.gei , `[[` , "value" ) ,
+        lin = sweep( sapply( grp.gei , `[[` , "lin" ) , 2 , sapply( grp.gei.wgt , `[[` , "value" ) , "*" ) +
+          sweep( sapply( grp.gei.wgt , `[[` , "lin" ) , 2 , sapply( grp.gei , `[[` , "value" ) , "*" ) )
 
-    # between:
+    # compute within component
+    wtn.gei <- sum( gei.within.components$value )
+    within.lin <- rowSums( gei.within.components$lin )
+
+    # between (residual)
     btw.gei <- ttl.gei - wtn.gei
     between.lin <- ttl.lin - within.lin
 
+    # create vector of estimates
+    estimates <- c( ttl.gei, wtn.gei, btw.gei )
+    names( estimates ) <- c( "total", "within", "between" )
 
-    estimates <- matrix( c( ttl.gei, wtn.gei, btw.gei ), dimnames = list( c( "total", "within", "between" ) ) )[,]
-
+    # create linearized matrix
     lin.matrix <- matrix( data = c(ttl.lin, within.lin, between.lin), ncol = 3, dimnames = list( NULL, c( "total", "within", "between" ) ) )
-    variance <- survey::svyrecvar( lin.matrix/design$prob , design$cluster, design$strata, design$fpc, postStrata = design$postStrata )
+    rm(ttl.lin, within.lin, between.lin)
 
-    rval <- list( estimate = estimates )
-    names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+    # ensure length
+    if ( nrow( lin.matrix ) != length( design$prob ) ) {
+      tmplin <- matrix( 0 , nrow = nrow( design$variables ) , ncol = ncol( lin.matrix ) )
+      tmplin[ w > 0 , ] <- lin.matrix
+      lin.matrix <- tmplin ; rm( tmplin )
+      colnames( lin.matrix ) <- c( "total", "within", "between" )
+    }
+    rownames( lin.matrix ) <- rownames( design$variables )
+
+    # compute variance
+    variance <- survey::svyrecvar( sweep( lin.matrix , 1 , 1/design$prob , "*" ) , design$cluster, design$strata, design$fpc, postStrata = design$postStrata )
+    variance[ which( is.nan( variance ) ) ] <- NA
+
+    # compute deff
+    if ( is.character(deff) || deff ) {
+      nobs <- sum( weights( design ) != 0 )
+      npop <- sum( weights( design ) )
+      if (deff == "replace") vsrs <- survey::svyvar( lin.matrix , design, na.rm = na.rm) * npop^2/nobs
+      else vsrs <- survey::svyvar( lin.matrix , design , na.rm = na.rm ) * npop^2 * (npop - nobs)/(npop * nobs)
+      deff.estimate <- variance/vsrs
+    }
+
+    # keep necessary linearized functions
+    lin.matrix <- lin.matrix[ 1/design$prob > 0 , ]
+
+    # build result object
+    rval <- c( estimates )
     attr(rval, "var") <- variance
-    attr(rval, "statistic") <- "gei decomposition"
-    attr(rval,"epsilon")<- epsilon
-    attr(rval,"group")<- as.character( subgroup )[[2]]
-    class(rval) <- c( "cvydstat" , "cvystat" , "svystat" )
-
+    attr(rval, "statistic") <- "jdiv decomposition"
+    attr(rval,"group") <- as.character( subgroup )[[2]]
+    attr(rval,"epsilon") <- epsilon
+    class(rval) <- c( "cvystat" , "svystat" )
+    if ( linearized ) attr(rval,"linearized") <- lin.matrix
+    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
+    if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
     rval
 
   }
@@ -363,113 +276,233 @@ svygeidec.survey.design <-
 #' @rdname svygeidec
 #' @export
 svygeidec.svyrep.design <-
-  function( formula, subgroup, design, epsilon = 1, na.rm=FALSE, ...) {
+  function( formula, subgroup, design, epsilon = 1, na.rm=FALSE, deff = FALSE , linearized = FALSE , return.replicates = FALSE , ...) {
 
+    # between inequality function
+    fun.btw.gei <- function( y , w , grp , epsilon ) {
+
+      y <- y[ w>0 ]
+      grp <- grp[ w>0 ]
+      w <- w[ w>0 ]
+
+      N <- sum( w )
+      Y <- sum( y * w )
+      mu <- Y/N
+      N.g <- tapply( w , grp , sum , na.rm = TRUE )
+      Y.g <- tapply( w * y , grp , sum , na.rm = TRUE )
+      mu.g <- Y.g / N.g
+
+      if ( epsilon == 0 ) {
+        estimate <- - sum( N.g * log( mu.g / mu ) ) / N
+      } else if ( epsilon == 1) {
+        estimate <- sum( ( Y.g / Y ) * log( mu.g / mu ) )
+      } else {
+        estimate <- sum( ( N.g / N ) * ( ( mu.g / mu )^epsilon - 1 ) ) / ( epsilon^2 - epsilon )
+      }
+      estimate
+    }
+
+    # within inequality function
+    fun.wtn.gei <- function( y , w , grp , epsilon ) {
+
+      y <- y[ w>0 ]
+      grp <- grp[ w>0 ]
+      w <- w[ w>0 ]
+
+      N <- sum( w )
+      Y <- sum( y * w )
+      mu <- Y/N
+      N.g <- tapply( w , grp , sum , na.rm = TRUE )
+      Y.g <- tapply( w * y , grp , sum , na.rm = TRUE )
+      s.g <- Y.g / Y
+      p.g <- N.g / N
+      gei.g <- sapply( levels( grp ) , function( grpv ) CalcGEI( y , ifelse( grp == grpv , w , 0 ) , epsilon = epsilon ) )
+
+      if ( epsilon == 0 ) {
+        estimate <- sum( p.g * gei.g )
+      } else if ( epsilon == 1) {
+        estimate <- sum( s.g * gei.g )
+      } else {
+        estimate <- sum( (s.g^epsilon) * (p.g^(1-epsilon)) * gei.g )
+      }
+
+      estimate
+
+    }
+
+    # collect data
     incvar <- model.frame(formula, design$variables, na.action = na.pass)[,]
-    grpvar <- model.frame( subgroup, design$variables, na.action = na.pass)[,]
+    grpvar <- model.frame( subgroup, design$variables, na.action = na.pass , drop.unused.levels = TRUE)[,]
 
+    # check types
     if ( class(grpvar) == "labelled" ) {
       stop( "This function does not support 'labelled' variables. Try factor().")
     }
 
+    # treat missing values
     if(na.rm){
       nas<-is.na(incvar) | is.na(grpvar)
       design<-design[!nas,]
       df <- model.frame(design)
-      incvar <- incvar[!nas]
-      grpvar <- grpvar[!nas]
+      incvar <- model.frame(formula, design$variables, na.action = na.pass)[,]
+      grpvar <- model.frame( subgroup, design$variables, na.action = na.pass , drop.unused.levels = TRUE)[,]
     }
 
+    # collect samling weights
     ws <- weights(design, "sampling")
 
-    if ( any( incvar[ ws != 0 ] <= 0, na.rm = TRUE) ) stop( paste("the GEI is undefined for zero incomes if epsilon ==", epsilon) )
+    # check for strictly positive incomes
+    if ( any( incvar[ws != 0] <= 0 , na.rm = TRUE ) ) stop( "The GEI indices are defined for strictly positive variables only.\nNegative and zero values not allowed." )
 
-    if ( any( is.na(incvar) | is.na(grpvar) ) ) {
-
-      rval <- list( estimate = matrix( c( NA, NA, NA ), dimnames = list( c( "total", "within", "between" ) ) )[,] )
-      names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-      attr(rval, "var") <- matrix( rep(NA,9), ncol = 3, dimnames = list( c( "total", "within", "between" ), c( "total", "within", "between" ) ) )[,]
-      attr(rval, "statistic") <- "gei decomposition"
-      attr(rval,"epsilon")<- epsilon
-      attr(rval,"group")<- as.character( subgroup )[[2]]
-      class(rval) <- c( "cvydstat" , "cvystat" , "svrepstat" )
-
-      return(rval)
-
-    }
-
+    # create interaction
     grpvar <- interaction( grpvar )
 
+    # collect analysis weights
     ww <- weights(design, "analysis")
+    qq.ttl.gei <- apply(ww, 2, function(wi) CalcGEI(incvar, wi, epsilon = epsilon) )
 
-    # overall estimates
-    mu <- sum( incvar * ws ) / sum(ws)
+    ### point estimates
 
-    # total
-    ttl.gei <- calc.gei( x = incvar, weights = ws, epsilon = epsilon)
-    qq.ttl.gei <- apply(ww, 2, function(wi) calc.gei(incvar, wi, epsilon = epsilon) )
+    # total inequality
+    ttl.gei <- CalcGEI( x = incvar, weights = ws , epsilon = epsilon )
+    btw.gei <- fun.btw.gei( incvar , ws , grpvar , epsilon )
+    # wtn.gei <- fun.wtn.gei( incvar , ws , grpvar , epsilon )
+    wtn.gei <- ttl.gei - btw.gei
+    estimates <- c( ttl.gei, wtn.gei, btw.gei )
+    stopifnot( all.equal ( fun.btw.gei( incvar , ws , grpvar , epsilon ) , btw.gei , tolerance = 1e-10 ) )
 
-    # within
-    within.gei.fun <- function(f.data) {
+    ### variance estimation
 
-      tt.mu <- sum( f.data[,1] * f.data[,3] ) / sum(f.data[,3])
-      tt.bw <- sum( f.data[,3] )
+    # create matrix of replicates
+    qq <- apply( ww , 2 , function( wi ) {
+      ttl.rep <- CalcGEI( incvar, wi , epsilon )
+      btw.rep <- fun.btw.gei( incvar , wi , grpvar , epsilon )
+      wtn.rep <- ttl.rep - btw.rep
+      c( ttl.rep , wtn.rep , btw.rep )
+    } )
+    qq <- t( qq )
+    dimnames( qq ) <- list( NULL, c( "total", "within", "between" ) )
 
-      grp.wtd.gei <- by( data = f.data, INDICES = f.data[,2],
+    # compute variance
+    if ( anyNA( qq ) ) {
+      variance <- diag( estimates )
+      variance[,] <- NA
+    } else {
+      variance <- survey::svrVar( qq , design$scale, design$rscales, mse = design$mse, coef = estimates )
+    }
 
-                         function(data = f.data) {
-                           grp.mu <- sum(data[,1] * data[,3]) / sum( data[,3] )
-                           grp.p <- sum(data[,3])/tt.bw
-                           grp.g <- grp.p * grp.mu / tt.mu
-                           grp.gei <- calc.gei( x = data[,1], weights = data[,3], epsilon = epsilon)
+    # compute deff
+    if ( is.character(deff) || deff || linearized ) {
 
-                           if (epsilon == 0) {
-                             return( grp.p * grp.gei )
-                           } else if (epsilon == 1) {
-                             return( grp.g * grp.p^(1-epsilon) * grp.gei )
-                           } else {
-                             return( grp.g^epsilon * grp.p^(1-epsilon) * grp.gei )
-                           }
+      ### compute linearization
 
-                         },
-                         simplify = FALSE )
+      # compute linearized function
+      ttl.lin <- CalcGEI_IF( x = incvar, weights = ws, epsilon = epsilon )
 
-      return( sum( as.numeric(grp.wtd.gei) ) )
+      # treat domain
+      ttl.lin <- ttl.lin[ pmatch( names( ws ) , names( ttl.lin ) ) ]
+      names( ttl.lin ) <- names( ws )
+      ttl.lin[ ws<=0 ] <- 0
+
+      # create matrix of group-specific weights
+      wg <- sapply( levels(grpvar) , function(z) ifelse( grpvar == z , ws , 0 ) )
+
+      # calculate group-specific GEI and linearized functions
+      grp.gei <- lapply( colnames( wg )  , function( this.group ) {
+        wi <- wg[ , this.group ]
+        statobj <- list(
+          value = CalcGEI( x = incvar, weights = wi , epsilon = epsilon ) ,
+          lin = CalcGEI_IF( x = incvar, weights = wi , epsilon = epsilon ) )
+        lin2 <- rep( 0 , length( wi ) )
+        lin2[ wi > 0 ] <- statobj$lin
+        statobj$lin <- lin2
+        statobj
+      } )
+      names( grp.gei ) <- colnames( wg )
+
+      # calculate within component weight
+      grp.gei.wgt <- lapply( colnames( wg ) , function(i) {
+
+        wi <- wg[,i]
+
+        if ( epsilon == 0 ) {
+          this.linformula <- quote( ( N.g / N ) )
+        } else if ( epsilon == 1 ) {
+          this.linformula <- quote( ( Y.g / Y ) )
+        } else {
+          this.linformula <- substitute( quote( ( ( Y.g / Y )^epsilon ) * ( ( N.g / N )^( 1 - epsilon ) ) ) , list( epsilon = epsilon ) )
+          this.linformula <- eval( this.linformula )
+        }
+
+        contrastinf(
+          this.linformula ,
+          list( Y.g = list( value = sum( incvar * wi , na.rm = TRUE ) , lin = incvar * ( wi > 0 ) ) ,
+                Y = list( value = sum( incvar * ws , na.rm = TRUE ) , lin = incvar * ( ws > 0 ) ) ,
+                N.g = list( value = sum( wi , na.rm = TRUE ) , lin = ( wi > 0 ) ) ,
+                N = list( value = sum( ws , na.rm = TRUE ) , lin = ( ws > 0 ) ) ) )
+
+      } )
+      names( grp.gei.wgt ) <- colnames( wg )
+
+      # calculate within component weight
+      gei.within.components <-
+        list(
+          value = sapply( grp.gei.wgt , `[[` , "value" ) * sapply( grp.gei , `[[` , "value" ) ,
+          lin = sweep( sapply( grp.gei , `[[` , "lin" ) , 2 , sapply( grp.gei.wgt , `[[` , "value" ) , "*" ) +
+            sweep( sapply( grp.gei.wgt , `[[` , "lin" ) , 2 , sapply( grp.gei , `[[` , "value" ) , "*" ) )
+
+      # compute within component
+      wtn.gei <- sum( gei.within.components$value )
+      within.lin <- rowSums( gei.within.components$lin )
+
+      # between (residual)
+      btw.gei <- ttl.gei - wtn.gei
+      between.lin <- ttl.lin - within.lin
+
+      # create vector of estimates
+      estimates <- c( ttl.gei, wtn.gei, btw.gei )
+      names( estimates ) <- c( "total", "within", "between" )
+
+      # treat out of sample
+
+      # create linearized matrix
+      lin.matrix <- matrix( data = c(ttl.lin, within.lin, between.lin), ncol = 3, dimnames = list( NULL, c( "total", "within", "between" ) ) )
+      rownames( lin.matrix ) <- rownames( design$variables )
+      rm(ttl.lin, within.lin, between.lin)
+
+      ### compute deff
+      nobs <- length( design$pweights )
+      npop <- sum( design$pweights )
+      vsrs <- unclass( survey::svyvar( lin.matrix , design, na.rm = na.rm, return.replicates = FALSE, estimate.only = TRUE)) * npop^2/nobs
+      if (deff != "replace") vsrs <- vsrs * (npop - nobs)/npop
+      deff.estimate <- variance / vsrs
 
     }
 
-    wtn.gei <- within.gei.fun( f.data = data.frame(incvar, grpvar, ws = ws) )
-    qq.wtn.gei <- apply( ww, 2, function(wi) within.gei.fun( f.data = data.frame(incvar, grpvar, ws =  wi ) ) )
-
-    # between:
-    btw.gei <- ttl.gei - wtn.gei
-    qq.btw.gei <- qq.ttl.gei - qq.wtn.gei
-
-    if ( any(is.na( c( qq.ttl.gei, qq.wtn.gei, qq.btw.gei ) ) ) ) {
-
-      rval <- list( estimate = matrix( c( NA, NA, NA ), dimnames = list( c( "total", "within", "between" ) ) )[,] )
-      names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-      attr(rval, "var") <- matrix( rep(NA,9), ncol = 3, dimnames = list( c( "total", "within", "between" ), c( "total", "within", "between" ) ) )[,]
-      attr(rval, "statistic") <- "gei decomposition"
-      attr(rval,"epsilon")<- epsilon
-      attr(rval,"group")<- as.character( subgroup )[[2]]
-      class(rval) <- c( "cvydstat" , "cvystat" , "svrepstat" )
-
-      return(rval)
-
-    }
-
-    qq.matrix <- matrix( c( qq.ttl.gei, qq.wtn.gei, qq.btw.gei ), ncol = 3, dimnames = list( NULL, c( "total", "within", "between" ) ) )
-    variance <- survey::svrVar( qq.matrix, design$scale, design$rscales, mse = design$mse, coef = matrix( ttl.gei, wtn.gei, btw.gei ) )
-
-    rval <- list( estimate = matrix( c( ttl.gei, wtn.gei, btw.gei ), dimnames = list( c( "total", "within", "between" ) ) )[,] )
-    names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+    # build result object
+    rval <- estimates
+    names( rval ) <- c( "total", "within", "between" )
     attr(rval, "var") <- variance
     attr(rval, "statistic") <- "gei decomposition"
     attr(rval,"epsilon")<- epsilon
     attr(rval,"group")<- as.character( subgroup )[[2]]
-    class(rval) <- "cvydstat"
+    class(rval) <- c( "cvystat" , "svrepstat" , "svystat" )
+    if ( linearized ) attr(rval,"linearized") <- lin.matrix
+    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
 
+    # keep replicates
+    if (return.replicates) {
+      attr( qq , "scale") <- design$scale
+      attr( qq , "rscales") <- design$rscales
+      attr( qq , "mse") <- design$mse
+      rval <- list( mean = rval , replicates = qq )
+      class(rval) <- c( "cvystat" , "svrepstat" , "svystat" )
+    }
+
+    # add design effect estimate
+    if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
+
+    # retorna objeto
     rval
 
   }
@@ -482,8 +515,8 @@ svygeidec.DBIsvydesign <-
 
     design$variables <-
       cbind(
-        getvars(formula, design$db$connection,design$db$tablename, updates = design$updates, subset = design$subset),
-        getvars(subgroup, design$db$connection, design$db$tablename,updates = design$updates, subset = design$subset)
+        getvars( formula , design$db$connection , design$db$tablename , updates = design$updates , subset = design$subset ),
+        getvars( subgroup , design$db$connection , design$db$tablename , updates = design$updates , subset = design$subset )
       )
 
     NextMethod("svygeidec", design)

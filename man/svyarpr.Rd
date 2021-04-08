@@ -9,9 +9,28 @@
 \usage{
 svyarpr(formula, design, ...)
 
-\method{svyarpr}{survey.design}(formula, design, quantiles = 0.5, percent = 0.6, na.rm = FALSE, ...)
+\method{svyarpr}{survey.design}(
+  formula,
+  design,
+  quantiles = 0.5,
+  percent = 0.6,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  ...
+)
 
-\method{svyarpr}{svyrep.design}(formula, design, quantiles = 0.5, percent = 0.6, na.rm = FALSE, ...)
+\method{svyarpr}{svyrep.design}(
+  formula,
+  design,
+  quantiles = 0.5,
+  percent = 0.6,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
+  ...
+)
 
 \method{svyarpr}{DBIsvydesign}(formula, design, ...)
 }
@@ -27,6 +46,12 @@ svyarpr(formula, design, ...)
 \item{percent}{fraction of the quantile, usually .60}
 
 \item{na.rm}{Should cases with missing values be dropped?}
+
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
@@ -96,11 +121,11 @@ dbDisconnect( conn , shutdown = TRUE )
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 
 Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 linearization and residual techniques. Survey Methodology, 25, 193-203,
-URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
 \code{\link{svyarpt}}

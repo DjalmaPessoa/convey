@@ -7,6 +7,9 @@
 #' @param quantiles income quantile quantiles, usually .50 (median)
 #' @param percent fraction of the quantile, usually .60
 #' @param na.rm Should cases with missing values be dropped?
+#' @param deff Return the design effect (see \code{survey::svymean})
+#' @param linearized Should a matrix of linearized variables be returned
+#' @param return.replicates Return the replicate estimates?
 #' @param ... arguments passed on to `survey::svyquantile`
 #'
 #' @details you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
@@ -20,11 +23,11 @@
 #' @references Guillaume Osier (2009). Variance estimation for complex indicators
 #' of poverty and inequality. \emph{Journal of the European Survey Research
 #' Association}, Vol.3, No.3, pp. 167-195,
-#' ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+#' ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 #'
 #' Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 #' linearization and residual techniques. Survey Methodology, 25, 193-203,
-#' URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+#' URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 #'
 #' @keywords survey
 #'
@@ -95,16 +98,18 @@ svyarpt <-
 #' @rdname svyarpt
 #' @export
 svyarpt.survey.design <-
-	function(formula, design, quantiles = 0.5, percent = 0.6,  na.rm = FALSE,...) {
+	function(formula, design, quantiles = 0.5, percent = 0.6,  na.rm = FALSE, deff=FALSE , linearized = FALSE , ...) {
 
 		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
 
 		# if the class of the full_design attribute is just a TRUE, then the design is
 		# already the full design.  otherwise, pull the full_design from that attribute.
-		if ("logical" %in% class(attr(design, "full_design")))
-		full_design <- design else full_design <- attr(design, "full_design")
+		if ("logical" %in% class(attr(design, "full_design")))  full_design <- design else full_design <- attr(design, "full_design")
+
+		# collect income data
 		incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
+		# treat missing values
 		if(na.rm){
 			nas<-is.na(incvar)
 			design<-design[!nas,]
@@ -113,62 +118,71 @@ svyarpt.survey.design <-
 			else incvar[nas] <- 0
 		}
 
-		if( is.null( names( design$prob ) ) ) ind <- as.character( seq( length( design$prob ) ) ) else ind <- names(design$prob)
-
+		# collect sampling weights
 		w <- 1/design$prob
 
-		incvec <- model.frame(formula, full_design$variables, na.action = na.pass)[[1]]
+		# compute quantile
+		q_alpha <- svyiqalpha( formula, design = design, alpha = quantiles, method = "constant", na.rm = na.rm , linearized = TRUE , ...)
+		rval <- percent * coef( q_alpha )[[1]]
+		lin <- percent * attr( q_alpha , "linearized" )[,1]
 
-		if(na.rm){
-			nas<-is.na(incvec)
-			full_design<-full_design[!nas,]
-			if (length(nas) > length(full_design$prob))
-			incvec <- incvec[!nas]
-			else incvec[nas] <- 0
+		# ensure length
+		if ( length( lin ) != length( design$prob ) ) {
+		  tmplin <- rep( 0 , nrow( design$variables ) )
+		  tmplin[ w > 0 ] <- lin
+		  lin <- tmplin ; rm( tmplin )
+		  names( lin ) <- rownames( design$variables )
 		}
 
-		if( is.null( names( full_design$prob ) ) ) ncom <- as.character( seq( length( full_design$prob ) ) ) else ncom <- names(full_design$prob)
+		# compute variance
+		variance <- survey::svyrecvar( lin/design$prob, design$cluster, design$strata, design$fpc, postStrata = design$postStrata )
+		variance[ which( is.nan( variance ) ) ] <- NA
+		colnames( variance ) <- rownames( variance ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
 
-		wf <- 1/full_design$prob
-		htot <- h_fun(incvar, w)
-		q_alpha <- survey::svyquantile(x = formula, design = design, quantiles = quantiles,
-		method = "constant", na.rm = na.rm,...)
-		q_alpha <- as.vector(q_alpha)
-		rval <- percent * q_alpha
-		Fprime <- densfun(formula = formula, design = design, q_alpha, h=htot, FUN = "F", na.rm=na.rm)
-		N <- sum(w)
-		if (sum(1/design$prob==0) > 0) ID <- 1*(1/design$prob!=0) else
-		  ID <- 1 * ( ncom %in% ind )
-		linquant<- -(1/(N * Fprime)) * ID*((incvec <= q_alpha) - quantiles)
-		lin <- percent * linquant
+		# compute deff
+		if ( is.character(deff) || deff) {
+		  nobs <- sum( weights( design ) != 0 )
+		  npop <- sum( weights( design ) )
+		  if (deff == "replace") vsrs <- survey::svyvar( lin , design, na.rm = na.rm) * npop^2/nobs else vsrs <- survey::svyvar( lin , design , na.rm = na.rm ) * npop^2 * (npop - nobs)/(npop * nobs)
+		  deff.estimate <- variance/vsrs
+		}
 
-		variance <- survey::svyrecvar(lin/full_design$prob, full_design$cluster,
-		full_design$strata, full_design$fpc, postStrata = full_design$postStrata)
+		# keep necessary linearized functions
+		lin <- lin[ 1/design$prob > 0 ]
 
+		# coerce to matrix
+		lin <- matrix( lin , nrow = length( lin ) , dimnames = list( names( lin ) , strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]] ) )
+
+		# build result object
 		colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-		class(rval) <- c( "cvystat" , "svystat" )
-		attr(rval, "var") <- variance
-		attr(rval, "statistic") <- "arpt"
-		attr(rval, "lin") <- lin
+		class( rval ) <- c( "cvystat" , "svystat" )
+		attr( rval , "var" ) <- variance
+		attr( rval , "statistic" ) <- "arpt"
+		if ( linearized ) attr( rval , "linearized" ) <- lin
+		if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+		if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
 		rval
+
 	}
 
 #' @rdname svyarpt
 #' @export
 svyarpt.svyrep.design <-
-	function(formula, design, quantiles = 0.5, percent = 0.6, na.rm = FALSE, ...) {
+	function(formula, design, quantiles = 0.5, percent = 0.6, na.rm = FALSE, deff=FALSE , linearized=FALSE , return.replicates = FALSE , ...) {
 
-		if (is.null(attr(design, "full_design")))
-		stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
-
+	  # check for convey_prep
+		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
 
 		# if the class of the full_design attribute is just a TRUE, then the design is
 		# already the full design.  otherwise, pull the full_design from that attribute.
 		if ("logical" %in% class(attr(design, "full_design"))) full_design <- design else full_design <- attr(design, "full_design")
 
 
+		# collect data
 		df <- model.frame(design)
 		incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
+
+		# treat missing values
 		if(na.rm){
 			nas<-is.na(incvar)
 			design<-design[!nas,]
@@ -176,21 +190,72 @@ svyarpt.svyrep.design <-
 			incvar <- incvar[!nas]
 		}
 
+		# collect weights
 		w <- weights(design, "sampling")
+
+		# point estimate
 		quant_val <- computeQuantiles(incvar, w, p = quantiles)
 		quant_val <- as.vector(quant_val)
-		rval <- percent * quant_val
+		estimate <- percent * quant_val
+
+		# collect analysis weights
 		ww <- weights(design, "analysis")
+
+		# compute replicates
 		qq <- apply(ww, 2, function(wi) 0.6 * computeQuantiles(incvar, wi, p = quantiles))
-		if(anyNA(qq))variance <- NA
-		else variance <- survey::svrVar(qq, design$scale, design$rscales, mse = design$mse, coef = rval)
 
-		variance <- as.matrix( variance )
+		# compute variance
+		if ( any( is.na( qq ) ) ) variance <- as.matrix( NA ) else {
+		  variance <- survey::svrVar( qq , design$scale , design$rscales , mse = design$mse , coef = estimate )
+		  this.mean <- attr( variance , "means" )
+		  variance <- as.matrix( variance )
+		  attr( variance , "means" ) <- this.mean
+		}
+		colnames( variance ) <- rownames( variance ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
 
-		colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+		# compute deff
+		if ( is.character(deff) || deff | linearized ) {
+
+		  # compute linearized function
+		  lin <- percent * CalcQuantile_IF( incvar , w , quantiles )
+
+		  # compute deff
+		  nobs <- length( design$pweights )
+		  npop <- sum( design$pweights )
+		  vsrs <- unclass( survey::svyvar( lin , design, na.rm = na.rm, return.replicates = FALSE, estimate.only = TRUE)) * npop^2/nobs
+		  if (deff != "replace") vsrs <- vsrs * (npop - nobs)/npop
+		  deff.estimate <- variance / vsrs
+
+		  # filter observation
+		  names( lin ) <- rownames( design$variables )
+
+		  # coerce to matrix
+		  lin <- matrix( lin , nrow = length( lin ) , dimnames = list( names( lin ) , strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]] ) )
+
+		}
+
+		# build result object
+		rval <- estimate
+		names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
 		class(rval) <- c( "cvystat" , "svrepstat" )
 		attr(rval, "var") <- variance
 		attr(rval, "statistic") <- "arpt"
+		if ( linearized ) attr( rval , "linearized" ) <- lin
+		if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+
+		# keep replicates
+		if (return.replicates) {
+		  attr( qq , "scale") <- design$scale
+		  attr( qq , "rscales") <- design$rscales
+		  attr( qq , "mse") <- design$mse
+		  rval <- list( mean = rval , replicates = qq )
+		  class( rval ) <- c( "cvystat" , "svrepstat" )
+		}
+
+		# add design effect estimate
+		if ( is.character(deff) || deff) attr( rval , "deff" ) <- deff.estimate
+
+		# return object
 		rval
 	}
 

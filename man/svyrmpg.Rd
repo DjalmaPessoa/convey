@@ -17,6 +17,7 @@ svyrmpg(formula, design, ...)
   na.rm = FALSE,
   thresh = FALSE,
   poor_median = FALSE,
+  linearized = FALSE,
   ...
 )
 
@@ -49,6 +50,8 @@ svyrmpg(formula, design, ...)
 \item{thresh}{return the poverty poverty threshold}
 
 \item{poor_median}{return the median income of poor people}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
 }
 \value{
 Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
@@ -96,7 +99,7 @@ dbWriteTable( conn , 'eusilc' , eusilc )
 dbd_eusilc <-
 	svydesign(
 		ids = ~rb030 ,
-		strata = ~db040 , 
+		strata = ~db040 ,
 		weights = ~rb050 ,
 		data="eusilc",
 		dbname=dbfile,
@@ -118,11 +121,11 @@ dbDisconnect( conn , shutdown = TRUE )
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 
 Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 linearization and residual techniques. Survey Methodology, 25, 193-203,
-URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
 \code{\link{svyarpt}}

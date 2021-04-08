@@ -5,6 +5,9 @@
 #' @param formula a formula specifying the income variable
 #' @param design a design object of class \code{survey.design} or class \code{svyrep.design} from the \code{survey} library.
 #' @param na.rm Should cases with missing values be dropped?
+#' @param deff Return the design effect (see \code{survey::svymean})
+#' @param linearized Should a matrix of linearized variables be returned
+#' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'
 #' @details you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
@@ -18,11 +21,11 @@
 #' @references Guillaume Osier (2009). Variance estimation for complex indicators
 #' of poverty and inequality. \emph{Journal of the European Survey Research
 #' Association}, Vol.3, No.3, pp. 167-195,
-#' ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+#' ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 #'
 #' Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 #' linearization and residual techniques. Survey Methodology, 25, 193-203,
-#' URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+#' URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 #'
 #' @keywords survey
 #'
@@ -81,156 +84,251 @@
 #'
 #' @export
 svygini <-
-	function(formula, design, ...) {
+  function(formula, design, ...) {
 
-		if( length( attr( terms.formula( formula ) , "term.labels" ) ) > 1 ) stop( "convey package functions currently only support one variable in the `formula=` argument" )
+    if( length( attr( terms.formula( formula ) , "term.labels" ) ) > 1 ) stop( "convey package functions currently only support one variable in the `formula=` argument" )
 
-		UseMethod("svygini", design)
+    UseMethod("svygini", design)
 
-}
+  }
 
 
 #' @rdname svygini
 #' @export
 svygini.survey.design <-
-	function(formula, design, na.rm=FALSE, ...) {
+  function( formula , design , na.rm=FALSE , deff=FALSE , linearized = FALSE , ... ) {
 
-		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
+    # collect income data
+    incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
-		incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
+    # treat missing values
+    if (na.rm) {
+      nas <- is.na(incvar)
+      design <- design[nas == 0, ]
+      if (length(nas) > length(design$prob)) incvar <- incvar[nas == 0] else incvar[nas > 0] <- 0
+    }
 
-		if (na.rm) {
-			nas <- is.na(incvar)
-			design <- design[nas == 0, ]
-			if (length(nas) > length(design$prob)) incvar <- incvar[nas == 0] else incvar[nas > 0] <- 0
-		}
+    # collect sampling weights
+    w <- 1/design$prob
 
-		w <- 1/design$prob
+    # compute point estimate
+    estimate <- CalcGini( incvar , w )
 
-		ordincvar <- order(incvar)
-		w <- w[ordincvar]
-		incvar <- incvar[ordincvar]
+    # compute linearized function
+    lin <- CalcGini_IF( incvar , w )
 
-		# population size
-		N <- sum(w)
+    # ensure length
+    if ( length( lin ) != length( design$prob ) ) {
+      tmplin <- rep( 0 , nrow( design$variables ) )
+      tmplin[ w > 0 ] <- lin
+      lin <- tmplin ; rm( tmplin )
+      names( lin ) <- rownames( design$variables )
+    }
 
-		# total income
-		Y <- sum(incvar * w)
+    # compute variance
+    variance <- survey::svyrecvar( lin/design$prob, design$cluster, design$strata, design$fpc, postStrata = design$postStrata )
+    variance[ which( is.nan( variance ) ) ] <- NA
+    colnames( variance ) <- rownames( variance ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
 
-		# cumulative weight
-		r <- cumsum(w)
+    # compute deff
+    if ( is.character(deff) || deff) {
+      nobs <- sum( weights( design ) != 0 )
+      npop <- sum( weights( design ) )
+      if (deff == "replace") vsrs <- survey::svyvar( lin , design, na.rm = na.rm) * npop^2/nobs
+      else vsrs <- survey::svyvar( lin , design , na.rm = na.rm ) * npop^2 * (npop - nobs)/(npop * nobs)
+      deff.estimate <- variance/vsrs
+    }
 
-		# partial weighted function
-		G <- cumsum(incvar * w)
-		T2<- list(value=sum(incvar*w), lin=incvar)
-		T3<- list(value= sum(w), lin=rep(1, length(incvar)))
+    # keep necessary linearized functions
+    lin <- lin[ 1/design$prob > 0 ]
 
-		# get T1
-		T1val <- sum( r * incvar * w )
-		T1lin <-  Y - G + incvar * w + r * incvar
-		T1 <- list( value = T1val , lin = T1lin )
-		list_all <- list(T1 = T1, T2 = T2, T3 = T3)
-		GINI <- contrastinf( quote( ( 2 * T1 - T2 ) / ( T2 * T3 ) - 1 ) , list_all )
-		lingini <- as.vector( GINI$lin )
-		if(sum(w==0) > 0)  lingini <- lingini*(w!=0)
-		lingini <- lingini[order(ordincvar)]
-		rval <- GINI$value
+    # coerce to matrix
+    lin <- matrix( lin , nrow = length( lin ) , dimnames = list( names( lin ) , strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]] ) )
 
-		variance <- survey::svyrecvar(lingini/design$prob, design$cluster,design$strata, design$fpc, postStrata = design$postStrata)
+    # build result object
+    rval <- estimate
+    names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+    class(rval) <- c( "cvystat" , "svystat" )
+    attr(rval, "var") <- variance
+    attr(rval, "statistic") <- "gini"
+    if ( linearized ) attr(rval,"linearized") <- lin
+    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+    if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
+    rval
 
-		colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-		class(rval) <- c( "cvystat" , "svystat" )
-		attr(rval, "var") <- variance
-		attr(rval, "statistic") <- "gini"
-		attr(rval,"lin")<- lingini
-
-		rval
-	}
+  }
 
 #' @rdname svygini
 #' @export
 svygini.svyrep.design <-
-	function(formula, design,na.rm=FALSE, ...) {
+  function( formula , design , na.rm=FALSE , deff=FALSE , linearized=FALSE , return.replicates = FALSE , ...) {
 
-		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
+    # collect data
+    df <- model.frame(design)
+    incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
-		df <- model.frame(design)
-		incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
+    # treat missing values
+    if( na.rm ) {
+      nas <- is.na( incvar )
+      design <- design[!nas,]
+      df <- model.frame( design )
+      incvar <- incvar[ !nas ]
+    }
 
-		if(na.rm){
-			nas<-is.na(incvar)
-			design<-design[!nas,]
-			df <- model.frame(design)
-			incvar <- incvar[!nas]
-		}
+    # colelct sampling weights
+    ws <- weights(design, "sampling")
 
+    # compute point estimate
+    estimate <- CalcGini(incvar, ws)
 
-		ComputeGini <-
-			function(x, w) {
-				w <- w[order(x)]
-				x <- x[order(x)]
-				N <- sum(w)
-				n <- length(x)
-				big_t <- sum(x * w)
-				r <- cumsum(w)
-				Num <- sum((2 * r - 1) * x * w)
-				Den <- N * big_t
-				(Num/Den) - 1
-			}
+    # collect analysis weights
+    ww <- weights(design, "analysis")
 
-		ws <- weights(design, "sampling")
+    # compute replicates
+    qq <- apply(ww, 2, function(wi) CalcGini(incvar, wi))
 
-		rval <- ComputeGini(incvar, ws)
+    # compute variance
+    if ( any( is.na( qq ) ) ) variance <- as.matrix( NA ) else {
+      variance <- survey::svrVar( qq , design$scale , design$rscales , mse = design$mse , coef = estimate )
+      this.mean <- attr( variance , "means" )
+      variance <- as.matrix( variance )
+      attr( variance , "means" ) <- this.mean
+    }
+    colnames( variance ) <- rownames( variance ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
 
-		ww <- weights(design, "analysis")
+    # compute deff
+    if ( is.character(deff) || deff || linearized ) {
 
-		qq <- apply(ww, 2, function(wi) ComputeGini(incvar, wi))
-		if(anyNA(qq))variance <- NA
-		else variance <- survey::svrVar(qq, design$scale, design$rscales, mse = design$mse, coef = rval)
+      # compute linearized function
+      lin <- CalcGini_IF( incvar , ws )
 
-		variance <- as.matrix( variance )
+      # compute deff
+      nobs <- length( design$pweights )
+      npop <- sum( design$pweights )
+      vsrs <- unclass( survey::svyvar( lin , design, na.rm = na.rm, return.replicates = FALSE, estimate.only = TRUE)) * npop^2/nobs
+      if (deff != "replace") vsrs <- vsrs * (npop - nobs)/npop
+      deff.estimate <- variance / vsrs
 
-		colnames( variance ) <- rownames( variance ) <-  names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
-		class(rval) <- c( "cvystat" , "svrepstat" ) 
-		attr(rval, "var") <- variance
-		attr(rval, "statistic") <- "gini"
+      # filter observation
+      names( lin ) <- rownames( design$variables )
 
-		rval
-	}
+      # coerce to matrix
+      lin <- matrix( lin , nrow = length( lin ) , dimnames = list( names( lin ) , strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]] ) )
+
+    }
+
+    # build result object
+    rval <- estimate
+    names( rval ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+    class(rval) <- c( "cvystat" , "svrepstat" )
+    attr(rval, "var") <- variance
+    attr(rval, "statistic") <- "gini"
+    if ( linearized ) attr( rval , "linearized" ) <- lin
+    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+
+    # keep replicates
+    if (return.replicates) {
+      attr( qq , "scale") <- design$scale
+      attr( qq , "rscales") <- design$rscales
+      attr( qq , "mse") <- design$mse
+      rval <- list( mean = rval , replicates = qq )
+      class( rval ) <- c( "cvystat" , "svrepstat" )
+    }
+
+    # add design effect estimate
+    if ( is.character(deff) || deff) attr( rval , "deff" ) <- deff.estimate
+
+    # return object
+    rval
+
+  }
 
 
 #' @rdname svygini
 #' @export
 svygini.DBIsvydesign <-
-	function (formula, design, ...){
+  function (formula, design, ...){
 
-		if (!( "logical" %in% class(attr(design, "full_design"))) ){
+    design$variables <-
+      getvars(
+        formula,
+        design$db$connection,
+        design$db$tablename,
+        updates = design$updates,
+        subset = design$subset
+      )
 
-			full_design <- attr( design , "full_design" )
+    NextMethod("svygini", design)
+  }
 
-			full_design$variables <-
-				getvars(
-					formula,
-					attr( design , "full_design" )$db$connection,
-					attr( design , "full_design" )$db$tablename,
-					updates = attr( design , "full_design" )$updates,
-					subset = attr( design , "full_design" )$subset
-				)
 
-			attr( design , "full_design" ) <- full_design
+# gini estimate function
+CalcGini <-
+  function(x, pw) {
 
-			rm( full_design )
+    # filter observations
+    x <- x[pw>0]
+    pw <- pw[pw>0]
 
-		}
+    # reorder
+    pw <- pw[order(x)]
+    x <- x[order(x)]
 
-		design$variables <-
-			getvars(
-				formula,
-				design$db$connection,
-				design$db$tablename,
-				updates = design$updates,
-				subset = design$subset
-			)
+    # intermediate estimates
+    N <- sum(pw)
+    n <- length(x)
+    big_t <- sum(x * pw)
+    r <- cumsum(pw)
+    Num <- sum((2 * r - 1) * x * pw)
+    Den <- N * big_t
 
-		NextMethod("svygini", design)
-	}
+    # gini estimate
+    (Num/Den) - 1
+
+  }
+
+# gini linearized function
+CalcGini_IF <- function( x , pw ) {
+
+  # filter observations
+  x <- x[ pw > 0 ]
+  pw <- pw[ pw > 0 ]
+
+  # collect indices
+  ind <- names( pw )
+
+  # reorder observations
+  ordx <- order(x)
+  pw <- pw[ordx]
+  x <- x[ordx]
+
+  # population size
+  N <- sum(pw)
+
+  # total income
+  Y <- sum(x * pw)
+
+  # cumulative weight
+  r <- cumsum(pw)
+
+  # partial weighted function
+  G <- cumsum(x * pw)
+  T1 <- list( value = sum( r * x * pw ) , lin = ( Y - G + x * pw + r * x ) )
+  T2 <- list( value = sum( x * pw ), lin = x)
+  T3 <- list( value = sum( pw ) , lin = rep( 1 , length( x ) ) )
+
+  # get T1
+  list_all <- list(T1 = T1, T2 = T2, T3 = T3)
+  GINI <- contrastinf( quote( ( 2 * T1 - T2 ) / ( T2 * T3 ) - 1 ) , list_all )
+  lingini <- as.numeric( GINI$lin )
+
+  # flip back to original order
+  lingini <- lingini[order(ordx)]
+
+  # add indices
+  names(lingini) <- ind
+
+  # return object
+  return( lingini )
+
+}

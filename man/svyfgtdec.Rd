@@ -19,6 +19,8 @@ svyfgtdec(formula, design, ...)
   quantiles = 0.5,
   na.rm = FALSE,
   thresh = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
   ...
 )
 
@@ -32,6 +34,9 @@ svyfgtdec(formula, design, ...)
   quantiles = 0.5,
   na.rm = FALSE,
   thresh = FALSE,
+  deff = FALSE,
+  linearized = TRUE,
+  return.replicates = FALSE,
   ...
 )
 
@@ -58,6 +63,12 @@ of abs_thresh; if "relq" it is given by percent times the quantile; if "relm" it
 \item{na.rm}{Should cases with missing values be dropped?}
 
 \item{thresh}{return the poverty threshold value}
+
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvydstat}", with estimates for the FGT(g), FGT(0), FGT(1), income gap ratio and GEI(income gaps; epsilon = g) with a "\code{var}" attribute giving the variance-covariance matrix.
@@ -89,17 +100,17 @@ des_eusilc_rep <- convey_prep( des_eusilc_rep )
 # absolute poverty threshold
 svyfgtdec(~eqincome, des_eusilc, g=2, abs_thresh=10000)
 # poverty threshold equal to arpt
-svywattsdec(~eqincome, des_eusilc, g=2, type_thresh= "relq" , thresh = TRUE)
+svyfgtdec(~eqincome, des_eusilc, g=2, type_thresh= "relq" , thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svywattsdec(~eqincome, des_eusilc, g=2, type_thresh= "relm" , thresh = TRUE)
+svyfgtdec(~eqincome, des_eusilc, g=2, type_thresh= "relm" , thresh = TRUE)
 
 # using svrep.design:
 # absolute poverty threshold
 svyfgtdec(~eqincome, des_eusilc_rep, g=2, abs_thresh=10000)
 # poverty threshold equal to arpt
-svywattsdec(~eqincome, des_eusilc_rep, g=2, type_thresh= "relq" , thresh = TRUE)
+svyfgtdec(~eqincome, des_eusilc_rep, g=2, type_thresh= "relq" , thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svywattsdec(~eqincome, des_eusilc_rep, g=2, type_thresh= "relm" , thresh = TRUE)
+svyfgtdec(~eqincome, des_eusilc_rep, g=2, type_thresh= "relm" , thresh = TRUE)
 
 \dontrun{
 
@@ -120,16 +131,14 @@ dbd_eusilc <-
 		dbtype="SQLite"
 	)
 
-
 dbd_eusilc <- convey_prep( dbd_eusilc )
-
 
 # absolute poverty threshold
 svyfgtdec(~eqincome, dbd_eusilc, g=2, abs_thresh=10000)
 # poverty threshold equal to arpt
-svywattsdec(~eqincome, dbd_eusilc, g=2, type_thresh= "relq" , thresh = TRUE)
+svyfgtdec(~eqincome, dbd_eusilc, g=2, type_thresh= "relq" , thresh = TRUE)
 # poverty threshold equal to 0.6 times the mean
-svywattsdec(~eqincome, dbd_eusilc, g=2, type_thresh= "relm" , thresh = TRUE)
+svyfgtdec(~eqincome, dbd_eusilc, g=2, type_thresh= "relm" , thresh = TRUE)
 
 dbRemoveTable( conn , 'eusilc' )
 
@@ -142,7 +151,7 @@ dbDisconnect( conn , shutdown = TRUE )
 Oihana Aristondo, Cassilda Lasso De La vega and Ana Urrutia (2010).
 A new multiplicative decomposition for the Foster-Greer-Thorbecke poverty indices.
 \emph{Bulletin of Economic Research}, Vol.62, No.3, pp. 259-267.
-University of Wisconsin. <doi:10.1111/j.1467-8586.2009.00320.x>
+University of Wisconsin. URL \url{http://dx.doi.org/10.1111/j.1467-8586.2009.00320.x}.
 
 James Foster, Joel Greer and Erik Thorbecke (1984). A class of decomposable poverty measures.
 \emph{Econometrica}, Vol.52, No.3, pp. 761-766.
@@ -150,11 +159,11 @@ James Foster, Joel Greer and Erik Thorbecke (1984). A class of decomposable pove
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 
 Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 linearization and residual techniques. Survey Methodology, 25, 193-203,
-URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
 \code{\link{svyfgt},\link{svyfgt},\link{svyfgt}}

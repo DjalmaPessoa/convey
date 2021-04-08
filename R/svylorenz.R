@@ -12,6 +12,9 @@
 #' @param add Should a new curve be plotted on the current graph?
 #' @param curve.col a string defining the color of the curve.
 #' @param na.rm Should cases with missing values be dropped? Defaults to \code{FALSE}.
+#' @param deff Return the design effect (see \code{survey::svymean})
+#' @param linearized Should a matrix of linearized variables be returned
+#' @param return.replicates Return the replicate estimates?
 #' @param ... additional arguments passed to \code{plot} methods
 #'
 #' @details you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
@@ -155,71 +158,12 @@ svylorenzpolygon_wrap <-
 
 #' @rdname svylorenz
 #' @export
-svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1), empirical = FALSE, plot = TRUE, add = FALSE, curve.col = "red", ci = TRUE, alpha = .05, na.rm = FALSE , ... ) {
+svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1), empirical = FALSE, plot = TRUE, add = FALSE, curve.col = "red", ci = TRUE, alpha = .05, na.rm = FALSE , deff = FALSE , linearized = FALSE , ... ) {
 
-  # quantile function:
-  wtd.qtl <- function (x, q = .5, weights = NULL ) {
-
-    indices <- weights != 0
-    x <- x[indices]
-    weights <- weights[indices]
-
-    x_1 <- c(0,x[-length(x)])
-    N <- sum(weights)
-    wsum <- cumsum(weights)
-    wsum_1 <- c(0,wsum[-length(wsum)])
-    alpha_k <- wsum / N
-
-    k <- which( (wsum_1 < (q * N) ) & ( (q * N) <= wsum) )
-
-    return( x_1[ k ] + ( x[k] - x_1[k] ) * ( (q * N) - wsum_1[k] ) / weights[k] )
-
-  }
-
-  # partial sum (1st definition):
-  wtd.psum <- function (x, q = .5, weights = NULL ) {
-    indices <- weights != 0
-    x <- x[indices]
-    weights <- weights[indices]
-
-    x_thres <- wtd.qtl(x = x, q = q, weights = weights )
-
-    return( sum( weights * x * 1 * (x <= x_thres) ) )
-
-  }
-
-  # partial sum (2nd definition)
-  wtd.psum <- function (x, q = .5, weights = NULL ) {
-
-    indices <- weights != 0
-    x <- x[indices]
-    weights <- weights[indices]
-
-    x_1 <- c(0,x[-length(x)])
-    N <- sum(weights)
-    wsum <- cumsum(weights)
-    wsum_1 <- c(0,wsum[-length(wsum)])
-    alpha_k <- wsum / N
-
-    k <- which( (wsum_1 < (q * N) ) & ( (q * N) <= wsum) )
-
-    t_k <- ( (q * N) - wsum_1 ) / weights
-
-    H_fn <- function(x) {
-      y <- NULL
-      y[ x < 0 ] <- 0
-      y[ (0 <= x) & (x < 1) ] <- x[ (0 <= x) & (x < 1) ]
-      y[ x >= 1 ] <- 1
-
-      return(y)
-    }
-
-    return( sum( weights * x * H_fn(t_k) ) )
-
-  }
-
+  # collect income data
   incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
+  # treat missing values
   if (na.rm) {
     nas <- is.na(incvar)
     design <- design[nas == 0, ]
@@ -228,92 +172,76 @@ svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1),
     else incvar[nas > 0] <- 0
   }
 
+  # collect weights
   w <- 1/design$prob
 
-  ordincvar<-order(incvar)
-  w <- w[ordincvar]
-  incvar <- incvar[ordincvar]
-
-  incvar <- incvar[w != 0]
-  w <- w[w != 0]
-
-  average <- sum( w * incvar ) / sum( w )
-  if ( is.na(average) ) {
+  # treat remaining missing
+  if ( anyNA( incvar [ w > 0 ] ) ) {
     variance <- as.matrix(NA)
     cis <- array( rbind(rep(NA, length(quantiles)),rep(NA, length(quantiles))), dim = c(2, length(quantiles)), dimnames = list( c( "(lower", "upper)" ), as.character(quantiles) ) )
     rval <- t( matrix( data = rep(NA, length(quantiles)), nrow = length(quantiles), dimnames = list( as.character( quantiles ), as.character(formula)[2] ) ) )
     rval <- list(quantiles = rval, CIs = cis)
     attr(rval, "SE") <- rep(NA, length(quantiles))
     class(rval) <- c( "cvyquantile" , "svyquantile" )
-
     return(rval)
   }
 
-  p <- NULL
-  L.p <- NULL
-
-  L.p <- as.numeric( lapply( quantiles, function(x) wtd.psum(x = incvar, weights = w, q = x ) ) ) / sum( w * incvar )
-
-  GL.p <- L.p * average
-
-  if (empirical) {
-    E_p <- ( 2*cumsum(w[w != 0]) - w[w != 0] ) / ( 2*sum(w[w != 0]) )
-    E_L.p <- cumsum(w[w != 0]*incvar[w != 0])/sum(w[w != 0]*incvar[w != 0])
-    E_GL.p <- E_L.p[w != 0] * average
-  }
-
+  # calculate estimates
   N <- sum( w )
-  var <- NULL
-  lin_mat <- matrix( NA, nrow = length( ordincvar ), ncol = length(quantiles) )
-  for ( pc in quantiles ) {
-    i <- match( pc, quantiles )
-    pc
+  Y <- sum( ifelse( w >0 , w * incvar , 0 ) )
+  mu <- Y/N
+  L.p <- as.numeric( lapply( quantiles, function( z ) CalcLorenz( incvar, w, z ) ) )
+  GL.p <- L.p * mu
 
-    if ( pc > 0 & pc < 1 ) {
+  # compute linearized
+  lin.matrix <- do.call( cbind , lapply( quantiles, function( z ) CalcLorenz_IF( incvar, w , z ) ) )
 
-      quant <- wtd.qtl( x = incvar, q = pc, weights = w )
-      s.quant <- L.p[i]
-
-      u_i <- 1/design$prob
-      u_i[ u_i > 0 ] <- ( 1 / ( N * average ) ) * ( ( ( incvar - quant ) * ( incvar <= quant ) ) + ( pc * quant ) - ( incvar * s.quant ) )
-      u_i <- u_i[ sort(ordincvar) ]
-
-      lin_mat[ , i ] <- u_i
-
-      rm(quant, s.quant , u_i )
-
-    } else if ( pc == 0 ) {
-
-      L.p[i] <- 0
-
-      lin_mat[ , i ] <- 0
-
-    } else if ( pc == 1 ) {
-
-      L.p[i] <- 1
-
-      lin_mat[ , i] <- 0
-    }
-
-    rm( i, pc )
-
+  # treat out of sample
+  if ( nrow( lin.matrix ) != length( design$prob ) ) {
+    rownames( lin.matrix ) <- rownames( design$variables )[ w > 0 ]
+    lin.matrix <- lin.matrix[ pmatch( rownames( design$variables ) , rownames(lin.matrix ) ) , ]
+    lin.matrix[ w <= 0 , ] <- 0
   }
-  var <- survey::svyrecvar( lin_mat/design$prob, design$cluster, design$strata, design$fpc, postStrata = design$postStrata )
 
-  se <- sqrt(diag(var))
+  # compute variance
+  variance <- survey::svyrecvar( sweep( lin.matrix , 1 , 1/design$prob , "*" ) , design$cluster, design$strata, design$fpc, postStrata = design$postStrata )
+  variance[ which( is.nan( variance ) ) ] <- NA
+  rownames( variance ) <- colnames( variance ) <- paste0( "L(" , quantiles , ")" )
+  se <- sqrt( diag( variance ) )
 
+  # compute deff
+  if ( is.character( deff ) || deff ) {
+    nobs <- sum( weights( design , "sampling" ) > 0 )
+    npop <- sum( weights( design , "sampling" ) )
+    if ( deff == "replace" ) vsrs <- survey::svyvar( lin.matrix , design, na.rm = na.rm) * npop^2/nobs
+    else vsrs <- survey::svyvar( lin.matrix , design , na.rm = na.rm ) * npop^2 * (npop - nobs)/(npop * nobs)
+    deff.estimate <- diag( variance )/ vsrs
+  }
 
-  CI.L <- L.p - se * qnorm( alpha, mean = 0, sd = 1, lower.tail = FALSE )
-  CI.U <- L.p + se * qnorm( alpha, mean = 0, sd = 1, lower.tail = FALSE )
+  # keep necessary linearized functions
+  lin.matrix <- lin.matrix[ 1/design$prob > 0 , ]
+  rownames( lin.matrix ) <- rownames( design$variables )[ w > 0 ]
+  colnames( lin.matrix ) <- paste0( "L(" , quantiles , ")" )
 
+  # compute CIs
+  CI.L <- L.p - se * qnorm( alpha , mean = 0, sd = 1, lower.tail = FALSE )
+  CI.U <- L.p + se * qnorm( alpha , mean = 0, sd = 1, lower.tail = FALSE )
   cis <- structure( rbind( CI.L,CI.U ), .Dim = c(2L, length(quantiles), 1L), .Dimnames = list(c("(lower", "upper)"), as.character(quantiles),  as.character(formula)[2]))
 
-  rval <- t( matrix( data = L.p, nrow = length(quantiles), dimnames = list( as.character( quantiles ), as.character(formula)[2] ) ) )
-  rval <- list(quantiles = rval, CIs = cis)
-  attr(rval, "var") <- var
-  attr(rval, "SE") <- se
-  class(rval) <- c( "cvyquantile" , "svyquantile" )
+  # build result object
+  rval <- c( L.p )
+  names( rval ) <- paste0( "L(" , quantiles , ")" )
+  attr( rval , "var") <- variance
+  attr( rval , "statistic") <- "lorenz"
+  class( rval ) <- c( "cvystat" , "svystat" )
+  if ( is.character(deff) || deff ) attr(rval,"deff") <- deff.estimate
+  if ( linearized ) attr(rval,"linearized") <- lin.matrix
+  if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
 
+  # calculate empirical curve
+  if (empirical) empirical.lorenz <- emp.interp( incvar , w )
+
+  # plot data
   if ( plot ) {
 
     plot_dots <- list( ... )
@@ -321,19 +249,25 @@ svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1),
     # remove `deff` argument sent by svyby
     if( 'deff' %in% names( plot_dots ) ) plot_dots$deff <- NULL
 
+    # overplot plot
     if ( !add ) do.call( svylorenzplot_wrap , plot_dots )
 
+    # add error for special options
     if( any( c( 'xlim' , 'ylim' , 'col' ) %in% names( list( ... ) ) ) ) stop( "xlim=, ylim=, and col= parameters are fixed within `svylorenz`.  use curve.col= to change the line color" )
+
+    # add reference line
     abline( 0 , 1 , ylim = c( 0 , 1 ) , plot_dots )
 
+    # add empirical curve
     if( empirical ) {
       lines_dots <- plot_dots
-      lines_dots$x <- E_p
-      lines_dots$y <- E_L.p
+      lines_dots$x <- empirical.lorenz$lorenz_x
+      lines_dots$y <- empirical.lorenz$lorenz_y
       lines_dots$col = curve.col
       do.call( svylorenzlines_wrap , lines_dots )
     }
 
+    # add main points
     points_dots <- plot_dots
     points_dots$x <- quantiles
     points_dots$y <- L.p
@@ -341,6 +275,7 @@ svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1),
 
     do.call( svylorenzpoints_wrap , points_dots )
 
+    # add confidence intervals
     if (ci) {
       X.Vec <- as.numeric( c(quantiles, tail(quantiles, 1), rev(quantiles), quantiles[1]) )
       Y.Vec <- as.numeric( c( CI.L, tail(CI.U, 1), rev(CI.U), CI.L[1] ) )
@@ -357,99 +292,29 @@ svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1),
 
   }
 
-  return(rval)
+  # return final object
+  return( rval )
 
 }
 
-
 #' @rdname svylorenz
 #' @export
-svylorenz.svyrep.design <- function(formula , design, quantiles = seq(0,1,.1), empirical = FALSE, plot = TRUE, add = FALSE, curve.col = "red", ci = TRUE, alpha = .05, na.rm = FALSE , ...) {
+svylorenz.svyrep.design <- function(formula , design, quantiles = seq(0,1,.1), empirical = FALSE, plot = TRUE, add = FALSE, curve.col = "red", ci = TRUE, alpha = .05, na.rm = FALSE , deff = FALSE , linearized = FALSE , return.replicates = FALSE , ...) {
 
-  # quantile function:
-  wtd.qtl <- function (x, q = .5, weights = NULL ) {
-
-    indices <- weights != 0
-    x <- x[indices]
-    weights <- weights[indices]
-
-    x_1 <- c(0,x[-length(x)])
-    N <- sum(weights)
-    wsum <- cumsum(weights)
-    wsum_1 <- c(0,wsum[-length(wsum)])
-    alpha_k <- wsum / N
-
-    k <- which( (wsum_1 < (q * N) ) & ( (q * N) <= wsum) )
-
-    return( x_1[ k ] + ( x[k] - x_1[k] ) * ( (q * N) - wsum_1[k] ) / weights[k] )
-
-  }
-
-  # partial sum (1st definition):
-  wtd.psum <- function (x, q = .5, weights = NULL ) {
-    indices <- weights != 0
-    x <- x[indices]
-    weights <- weights[indices]
-
-    x_thres <- wtd.qtl(x = x, q = q, weights = weights )
-
-    return( sum( weights * x * 1 * (x <= x_thres) ) )
-
-  }
-
-  # partial sum (2nd definition)
-  wtd.psum <- function (x, q = .5, weights = NULL ) {
-
-    indices <- weights != 0
-    x <- x[indices]
-    weights <- weights[indices]
-
-    x_1 <- c(0,x[-length(x)])
-    N <- sum(weights)
-    wsum <- cumsum(weights)
-    wsum_1 <- c(0,wsum[-length(wsum)])
-    alpha_k <- wsum / N
-
-    k <- which( (wsum_1 < (q * N) ) & ( (q * N) <= wsum) )
-
-    t_k <- ( (q * N) - wsum_1 ) / weights
-
-    H_fn <- function(x) {
-      y <- NULL
-      y[ x < 0 ] <- 0
-      y[ (0 <= x) & (x < 1) ] <- x[ (0 <= x) & (x < 1) ]
-      y[ x >= 1 ] <- 1
-
-      return(y)
-    }
-
-    return( sum( weights * x * H_fn(t_k) ) )
-
-  }
-
-  # wtd.psum for multiple quantiles:
-  lapply_wtd.psum <- function (x, qs = seq(0,1,.2), weights = NULL ) {
-    res <- lapply( qs, function (q) { wtd.psum( x = x, weights = weights, q = q ) / sum( weights[weights != 0] * x[weights != 0] ) } )
-    as.numeric(res)
-  }
-
+  # collect income data
   incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
 
+  # treat missing values
   if(na.rm){
     nas<-is.na(incvar)
     design<-design[!nas,]
+    incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
   }
 
-  incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
+  # collect sampling weights
   ws <- weights(design, "sampling")
-  ww <- weights(design, "analysis")
 
-  ordincvar <- order( incvar )
-
-  ws <- ws[ ordincvar ]
-  ww <- ww[ ordincvar, ]
-  incvar <- incvar[ ordincvar ]
-
+  # treat remaining missing
   if ( any( is.na( incvar [ ws > 0 ] ) ) ) {
     variance <- as.matrix(NA)
     cis <- array( rbind(rep(NA, length(quantiles)),rep(NA, length(quantiles))), dim = c(2, length(quantiles)), dimnames = list( c( "(lower", "upper)" ), as.character(quantiles) ) )
@@ -457,14 +322,20 @@ svylorenz.svyrep.design <- function(formula , design, quantiles = seq(0,1,.1), e
     rval <- list(quantiles = rval, CIs = cis)
     attr(rval, "SE") <- rep(NA, length(quantiles))
     class(rval) <- c( "cvyquantile" , "svyquantile" )
-
     return(rval)
   }
 
-  L.p <- t( as.matrix( lapply_wtd.psum( x = incvar, qs = quantiles, weights = ws ) ) )
+  # compute point estimates
+  L.p <- as.numeric( lapply( quantiles, function( z ) CalcLorenz( incvar, ws , z ) ) )
   rval <- t( matrix( data = L.p, dimnames = list( as.character( quantiles ) ) ) )
-  qq <- apply(ww, 2, function(wi) lapply_wtd.psum(x = incvar, qs = quantiles, weights = wi ) )
 
+  # collect analysis weights
+  ww <- weights(design, "analysis")
+
+  # compute replicates
+  qq <- t( apply( ww, 2, function(wi) as.numeric( lapply( quantiles, function( z ) CalcLorenz( incvar, wi , z ) ) ) ) )
+
+  # compute variance
   if ( any(is.na(qq))) {
     variance <- as.matrix(NA)
     cis <- array( rbind(rep(NA, length(quantiles)),rep(NA, length(quantiles))), dim = c(2, length(quantiles)), dimnames = list( c( "(lower", "upper)" ), as.character(quantiles) ) )
@@ -472,60 +343,85 @@ svylorenz.svyrep.design <- function(formula , design, quantiles = seq(0,1,.1), e
     rval <- list(quantiles = rval, CIs = cis)
     attr(rval, "SE") <- rep(NA, length(quantiles))
     class(rval) <- c( "cvyquantile" , "svyquantile" )
-
     return(rval)
   }
+  variance <- survey::svrVar( qq, design$scale, design$rscales, mse = design$mse, coef = rval )
+  rownames( variance ) <- colnames( variance ) <- paste0( "L(" , quantiles , ")" )
 
-  variance <- survey::svrVar( t(qq), design$scale, design$rscales, mse = design$mse, coef = rval )
+  # set up additional estimates
   se <- sqrt(diag(variance))
-  se[c(1, length(quantiles))] <- 0
 
-  if (empirical) {
-    ordincvar <- order(incvar)
-    incvar <- incvar[ordincvar]
-    ws <- ws[ordincvar]
-    E_p <- ( 2*cumsum(ws[ws != 0]) - ws[ws != 0] ) / ( 2*sum(ws[ws != 0]) )
-    E_L.p <- cumsum(ws[ws != 0]*incvar[ws != 0])/sum(ws[ws != 0]*incvar[ws != 0])
+  # compute deff
+  if ( is.character(deff) || deff ) {
+
+    # compute linearized
+    lin.matrix<- do.call( cbind , lapply( quantiles, function( z ) CalcLorenz_IF( incvar, ws , z ) ) )
+
+    # add names
+    rownames( lin.matrix ) <- rownames( design$variables )
+    colnames( lin.matrix ) <- paste0( "L(" , quantiles , ")" )
+
+    # compute deff
+    nobs <- length( design$pweights )
+    npop <- sum( design$pweights )
+    vsrs <- unclass( survey::svyvar( lin.matrix , design, na.rm = na.rm, return.replicates = FALSE, estimate.only = TRUE)) * npop^2/nobs
+    if (deff != "replace") vsrs <- vsrs * (npop - nobs)/npop
+    deff.estimate <- diag( variance ) / vsrs
+
   }
 
+  # compute CIs
   CI.L <- as.numeric( L.p - se * qnorm( alpha, mean = 0, sd = 1, lower.tail = FALSE ) )
   CI.U <- as.numeric( L.p + se * qnorm( alpha, mean = 0, sd = 1, lower.tail = FALSE ) )
-
   cis <- structure(rbind(CI.L,CI.U), .Dim = c(2L, length(quantiles), 1L), .Dimnames = list(c("(lower", "upper)"), as.character(quantiles),  as.character(formula)[2]))
-  rval <- t( matrix( data = L.p, nrow = length(quantiles), dimnames = list( as.character( quantiles ), as.character(formula)[2] ) ) )
-  rval <- list(quantiles = rval, CIs = cis)
-  attr(rval, "var") <- variance
-  attr(rval, "SE") <- se
-  class(rval) <- c( "cvyquantile" , "svyquantile" )
 
+  # set up result object
+  rval <- c( L.p )
+  names( rval ) <- paste0( "L(" , quantiles , ")" )
+  attr( rval , "var") <- variance
+  attr( rval , "statistic") <- "lorenz"
+  class( rval ) <- c( "cvystat" , "svrepstat" )
+  if ( linearized ) attr(rval,"linearized") <- lin.matrix
+  if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
 
+  # empirical curve
+  if (empirical) empirical.lorenz <- emp.interp( incvar , ws )
+
+  # plot curve
   if ( plot ) {
 
+    # set up options
     plot_dots <- list( ... )
 
     # remove `deff` argument sent by svyby
     if( 'deff' %in% names( plot_dots ) ) plot_dots$deff <- NULL
 
+    # star new plot
     if ( !add ) do.call( svylorenzplot_wrap , plot_dots )
 
+    # close unused option
     if( any( c( 'xlim' , 'ylim' , 'col' ) %in% names( list( ... ) ) ) ) stop( "xlim=, ylim=, and col= parameters are fixed within `svylorenz`.  use curve.col= to change the line color" )
+
+    # add reference line
     abline( 0 , 1 , ylim = c( 0 , 1 ) , plot_dots )
 
+    # plot empirical curve
     if( empirical ) {
       lines_dots <- plot_dots
-      lines_dots$x <- E_p
-      lines_dots$y <- E_L.p
+      lines_dots$x <- empirical.lorenz$lorenz_x
+      lines_dots$y <- empirical.lorenz$lorenz_y
       lines_dots$col = curve.col
       do.call( svylorenzlines_wrap , lines_dots )
     }
 
+    # add point estimates of ordinates
     points_dots <- plot_dots
     points_dots$x <- quantiles
     points_dots$y <- L.p
     points_dots$col <- curve.col
-
     do.call( svylorenzpoints_wrap , points_dots )
 
+    # add confidence intervals
     if (ci) {
       X.Vec <- as.numeric( c(quantiles, tail(quantiles, 1), rev(quantiles), quantiles[1]) )
       Y.Vec <- as.numeric( c( CI.L, tail(CI.U, 1), rev(CI.U), CI.L[1] ) )
@@ -535,13 +431,25 @@ svylorenz.svyrep.design <- function(formula , design, quantiles = seq(0,1,.1), e
       polygon_dots$y <- Y.Vec
       polygon_dots$col <- adjustcolor( curve.col, alpha.f = .2)
       polygon_dots$border <- NA
-
       do.call( svylorenzpolygon_wrap , polygon_dots )
 
     }
 
   }
 
+  # keep replicates
+  if (return.replicates) {
+    attr( qq , "scale") <- design$scale
+    attr( qq , "rscales") <- design$rscales
+    attr( qq , "mse") <- design$mse
+    rval <- list( mean = rval , replicates = qq )
+    class( rval ) <- c( "cvystat" , "svrepstat" )
+  }
+
+  # add design effect estimate
+  if ( is.character(deff) || deff ) attr(rval,"deff") <- deff.estimate
+
+  # return final result object
   return(rval)
 
 }
@@ -551,7 +459,151 @@ svylorenz.svyrep.design <- function(formula , design, quantiles = seq(0,1,.1), e
 svylorenz.DBIsvydesign <- function (formula, design, ...) {
 
   design$variables <- getvars(formula, design$db$connection, design$db$tablename, updates = design$updates, subset = design$subset)
-
   NextMethod("svylorenz", design)
+
+}
+
+
+# function for point estimates
+CalcLorenz <- function( x , w = rep( 1 , length( x ) ) , p ) {
+
+  # filter observations
+  x <- x[ w > 0 ]
+  w <- w[ w > 0 ]
+
+  # population totals
+  # N <- sum( w )
+  Y <- sum( x * w )
+
+  # weighted partial sum
+  Y.p <- wtd.psum( x, w , p )
+
+  # lorenz ordinate estimate
+  Y.p / Y
+
+}
+
+# function for linearized functions
+CalcLorenz_IF <- function( x , w , pc ) {
+
+  # filter observations
+  x <- x[ w > 0 ]
+  w <- w[ w > 0 ]
+
+  # population size
+  N <- sum( w )
+  Y <- sum( x * w )
+  mu <- Y/N
+
+  # compute interpolated quantile
+  quant <- smooth.quantile( x, w , pc )
+
+  # compute lorenz curve ordinate
+  L.p <- CalcLorenz( x , w , pc )
+
+  # compute linearized variable
+  # branch on special cases
+  lin <- if ( pc %in% c(0,1) ) rep( 0 , length( w ) ) else ( ( x - quant ) * ( x <= quant ) + ( pc * quant ) - ( x * L.p ) ) / Y
+
+  # add indices
+  names( lin ) <- names( w )
+
+  # retur linearized variable
+  lin
+
+}
+
+# # partial sum (1st definition):
+# wtd.psum <- function (x, q = .5, weights = NULL ) {
+#   indices <- weights != 0
+#   x <- x[indices]
+#   weights <- weights[indices]
+#
+#   x_thres <- wtd.qtl(x = x, q = q, weights = weights )
+#
+#   return( sum( weights * x * 1 * (x <= x_thres) ) )
+#
+# }
+
+# partial sum (2nd definition)
+wtd.psum <- function (x, weights = rep( 1 , length( x ) ) , q = .5 ) {
+
+  # filter observations
+  x <- x[ weights > 0 ]
+  weights <- weights[ weights > 0 ]
+
+  # reorder
+  ordx <- order( x )
+  x <- x[ ordx ]
+  weights <- weights[ ordx ]
+
+  # population size
+  N <- sum( weights )
+
+  # intermediate partial sums
+  wsum <- cumsum( weights )
+  wsum_1 <- wsum - weights
+  alpha_k <- wsum / N
+  t_k <- ( (q * N) - wsum_1 ) / weights
+
+  # H function
+  H_fn <- function(x) ifelse( x < 0 , 0 , ifelse( (0 <= x) & (x < 1) , x , ifelse( x >= 1 , 1 , NA ) ) )
+
+  # compute estimate
+  sum( weights * x * H_fn( t_k ) )
+
+}
+
+# quantile function:
+smooth.quantile <- function (x , weights = rep( 1 , length( x) ) , q = .5 ) {
+
+  # filter observations
+  x <- x[ weights > 0 ]
+  weights <- weights[ weights > 0 ]
+
+  # reorder
+  ordx <- order( x )
+  x <- x[ ordx ]
+  weights <- weights[ ordx ]
+
+  # population size
+  N <- sum(weights)
+
+  # partial sums
+  x_1 <- c( min( x ) , x[ - length( x ) ] )
+  wsum <- cumsum( weights )
+  wsum_1 <- wsum - weights
+  alpha_k <- wsum / N
+  t_k <- ( (q * N) - wsum_1 ) / weights
+
+  # interpolation
+  smth.vec <- ( x_1 + ( x - x_1 ) * t_k )
+
+  # find k
+  k <- which( ( wsum_1 < ( q * N) ) & ( (q * N) <= wsum) )
+
+  # return estimate
+  return( smth.vec[k] )
+
+}
+
+# empirical interpolation
+emp.interp <- function( x , w ) {
+
+  # filter observations
+  x <- x[ w > 0 ]
+  w <- w[ w > 0 ]
+
+  # reorder
+  ordx <- order( x )
+  x <- x[ ordx ]
+  w <- w[ ordx ]
+
+  # interpolate x and y
+  data.frame(
+    # lorenz_x = ( 2*cumsum(w) - w ) / ( 2*sum(w) ) , # where is this from?
+    lorenz_x = cumsum( w ) / sum(w) ,
+    lorenz_y = cumsum( w * x ) / sum( w * x ) ,
+    stringsAsFactors = FALSE )
 
 }

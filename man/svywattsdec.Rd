@@ -74,13 +74,16 @@ library(laeken)
 data(eusilc) ; names( eusilc ) <- tolower( names( eusilc ) )
 
 # linearized design
-
 des_eusilc <- svydesign( ids = ~rb030 , strata = ~db040 ,  weights = ~rb050 , data = eusilc )
 des_eusilc <- convey_prep( des_eusilc )
 
 # replicate-weighted design
 des_eusilc_rep <- as.svrepdesign( des_eusilc , type = "bootstrap" )
 des_eusilc_rep <- convey_prep( des_eusilc_rep )
+
+# filter positive incomes
+des_eusilc <- subset( des_eusilc , eqincome > 0 )
+des_eusilc_rep <- subset( des_eusilc_rep , eqincome > 0 )
 
 # absolute poverty threshold
 svywattsdec(~eqincome, des_eusilc, abs_thresh=10000)
@@ -116,8 +119,8 @@ dbd_eusilc <-
 		dbtype="SQLite"
 	)
 
-
 dbd_eusilc <- convey_prep( dbd_eusilc )
+dbd_eusilc <- subset( dbd_eusilc , eqincome > 0 )
 
 # absolute poverty threshold
 svywattsdec(~eqincome, dbd_eusilc, abs_thresh=10000)
@@ -136,7 +139,7 @@ dbDisconnect( conn , shutdown = TRUE )
 \references{
 McKinley L. Blackburn (1989). Poverty measurement: an index related to a Theil measure of inequality.
 \emph{Journal of Business & Economic Statistics}, Vol.7, No.4, pp. 475-481,
-URL \url{https://amstat.tandfonline.com/doi/abs/10.1080/07350015.1989.10509760}.
+URL \url{http://amstat.tandfonline.com/doi/abs/10.1080/07350015.1989.10509760}.
 
 Satya R. Chakravarty, Joseph Deutsch and Jacques Silber (2008).
 On the Watts multidimensional poverty index and its decomposition.
@@ -149,11 +152,11 @@ University of Wisconsin. URL \url{https://www.irp.wisc.edu/publications/dps/pdfs
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 
 Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 linearization and residual techniques. Survey Methodology, 25, 193-203,
-URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
 \code{\link{svywatts},\link{svyfgt},\link{svyfgt}}

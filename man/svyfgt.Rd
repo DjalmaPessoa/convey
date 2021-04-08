@@ -19,6 +19,8 @@ svyfgt(formula, design, ...)
   quantiles = 0.5,
   na.rm = FALSE,
   thresh = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
   ...
 )
 
@@ -32,6 +34,9 @@ svyfgt(formula, design, ...)
   quantiles = 0.5,
   na.rm = FALSE,
   thresh = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
   ...
 )
 
@@ -58,15 +63,27 @@ of abs_thresh; if "relq" it is given by percent times the quantile; if "relm" it
 \item{na.rm}{Should cases with missing values be dropped?}
 
 \item{thresh}{return the poverty threshold value}
+
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned?}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
 }
 \description{
-Estimate the FGT measure for the cases: \code{alpha=0} headcount ratio and \code{alpha=1} poverty gap index.
+Estimate the FGT measure.
 }
 \details{
 you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
+
+The FGT poverty measures have three special cases.
+When \code{g = 0}, the FGT measure is the headcount poverty rate, assigning the same "poverty-weight" to all persons below the poverty line.
+When \code{g = 1}, it becomes the poverty gap ratio, a measure which accounts for the intensity of income shortfall among the poor.
+When \code{g = 2}. it becomes the squared poverty gap ratio, a measure that also accounts for inequality of poverty intesity across the poor.
+The \code{g} is a poverty sensitivity parameter, adding more weight to people with greater income shortfalls as it increases.
 }
 \examples{
 library(survey)
@@ -155,19 +172,26 @@ dbDisconnect( conn , shutdown = TRUE )
 James Foster, Joel Greer and Erik Thorbecke (1984). A class of decomposable poverty measures.
 \emph{Econometrica}, Vol.52, No.3, pp. 761-766.
 
+Y.G. Berger and C. J. Skinner (2003), Variance estimation for a low income proportion.
+\emph{Journal of the Royal Statistical Society: Series C (Applied Statistics)}, Vol. 52, No. 4, pp. 457-468.
+URL \url{https://doi.org/10.1111/1467-9876.00417}
+
+Buhong Zheng (2001). Statistical inference for poverty measures with relative poverty lines.
+\emph{Journal of Econometrics}, Vol. 101, pp. 337-356.
+
 Guillaume Osier (2009). Variance estimation for complex indicators
 of poverty and inequality. \emph{Journal of the European Survey Research
 Association}, Vol.3, No.3, pp. 167-195,
-ISSN 1864-3361, URL \url{https://ojs.ub.uni-konstanz.de/srm/article/view/369}.
+ISSN 1864-3361, URL \url{http://ojs.ub.uni-konstanz.de/srm/article/view/369}.
 
 Jean-Claude Deville (1999). Variance estimation for complex statistics and estimators:
 linearization and residual techniques. Survey Methodology, 25, 193-203,
-URL \url{https://www150.statcan.gc.ca/n1/en/catalogue/12-001-X19990024882}.
+URL \url{http://www5.statcan.gc.ca/bsolc/olc-cel/olc-cel?lang=eng&catno=12-001-X19990024882}.
 }
 \seealso{
 \code{\link{svyarpt}}
 }
 \author{
-Djalma Pessoa and Anthony Damico
+Djalma Pessoa, Anthony Damico and Guilherme Jacob
 }
 \keyword{survey}

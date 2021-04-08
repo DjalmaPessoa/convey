@@ -5,13 +5,32 @@
 \alias{svygeidec.survey.design}
 \alias{svygeidec.svyrep.design}
 \alias{svygeidec.DBIsvydesign}
-\title{Generalized entropy index Decomposition}
+\title{Generalized Entropy Index Decomposition}
 \usage{
 svygeidec(formula, subgroup, design, ...)
 
-\method{svygeidec}{survey.design}(formula, subgroup, design, epsilon = 1, na.rm = FALSE, ...)
+\method{svygeidec}{survey.design}(
+  formula,
+  subgroup,
+  design,
+  epsilon = 1,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  ...
+)
 
-\method{svygeidec}{svyrep.design}(formula, subgroup, design, epsilon = 1, na.rm = FALSE, ...)
+\method{svygeidec}{svyrep.design}(
+  formula,
+  subgroup,
+  design,
+  epsilon = 1,
+  na.rm = FALSE,
+  deff = FALSE,
+  linearized = FALSE,
+  return.replicates = FALSE,
+  ...
+)
 
 \method{svygeidec}{DBIsvydesign}(formula, subgroup, design, ...)
 }
@@ -27,6 +46,12 @@ svygeidec(formula, subgroup, design, ...)
 \item{epsilon}{a parameter that determines the sensivity towards inequality in the top of the distribution. Defaults to epsilon = 1.}
 
 \item{na.rm}{Should cases with missing values be dropped? Observations containing missing values in income or group variables will be dropped.}
+
+\item{deff}{Return the design effect (see \code{survey::svymean})}
+
+\item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{return.replicates}{Return the replicate estimates?}
 }
 \value{
 Object of class "\code{cvydstat}", which are vectors with a "\code{var}" attribute giving the variance-covariance matrix and a "\code{statistic}" attribute giving the name of the statistic.
@@ -124,9 +149,9 @@ dbDisconnect( conn , shutdown = TRUE )
 
 }
 \references{
-Anthony F. Shorrocks (1984). Inequality decomposition
-groups population subgroups. \emph{Econometrica}, v. 52, n. 6, 1984, pp. 1369-1385.
-URL \url{https://www.jstor.org/stable/1913511}.
+Anthony F. Shorrocks (1984). Inequality decomposition groups population subgroups.
+\emph{Econometrica}, v. 52, n. 6, 1984, pp. 1369-1385.
+URL \url{http://www.jstor.org/stable/1913511}.
 
 Martin Biewen and Stephen Jenkins (2002). Estimation of Generalized Entropy
 and Atkinson Inequality Indices from Complex Survey Data. \emph{DIW Discussion Papers},
