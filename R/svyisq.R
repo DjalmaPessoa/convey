@@ -11,8 +11,9 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
-#' @param ... arguments passed on to `survey::svyquantile`
+#' @param ... future expansion. not used.
 #'
 #' @return Object of class "\code{cvystat}", which are vectors with a "\code{var}" attribute giving the variance and a "\code{statistic}" attribute giving the name of the statistic.
 #'
@@ -96,7 +97,7 @@ svyisq <-
 #' @rdname svyisq
 #' @export
 svyisq.survey.design <-
-	function(formula, design, alpha, quantile = FALSE, upper = FALSE , na.rm = FALSE, deff = FALSE , linearized = FALSE , ...) {
+	function(formula, design, alpha = .5, quantile = FALSE, upper = FALSE , na.rm = FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ...) {
 
 	  # test for convey_prep
 		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
@@ -117,7 +118,8 @@ svyisq.survey.design <-
 	  w <- 1/design$prob
 
 	  # store quantile
-	  q_alpha <- survey::svyquantile(x = formula, design = design, quantiles = alpha, method = "constant", na.rm = na.rm,...)
+	  # q_alpha <- survey::svyquantile(x = formula, design = design, quantiles = alpha, method = "constant", na.rm = na.rm,...)
+	  q_alpha <- computeQuantiles( incvar , w , alpha )
 
 	  # compute value
 	  estimate <- CalcISQ( incvar , w , alpha )
@@ -166,7 +168,8 @@ svyisq.survey.design <-
 	  attr(rval, "statistic") <- "isq"
 		if(quantile) attr(rval, "quantile") <- q_alpha
 	  if ( linearized ) attr(rval,"linearized") <- lin
-	  if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+	  if ( influence )  attr( rval , "influence" )  <- sweep( lin , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+	  if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
 	  if ( is.character(deff) || deff ) attr(rval,"deff") <- deff.estimate
 	  rval
 
@@ -175,7 +178,7 @@ svyisq.survey.design <-
 #' @rdname svyisq
 #' @export
 svyisq.svyrep.design <-
-	function(formula, design, alpha,quantile = FALSE, upper = FALSE , na.rm = FALSE, deff = FALSE , linearized=FALSE , return.replicates = FALSE , ...){
+	function(formula, design, alpha = .5 , quantile = FALSE, upper = FALSE , na.rm = FALSE, deff = FALSE , linearized=FALSE , return.replicates = FALSE , ...){
 
 	  # check for convey_prep
 		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
