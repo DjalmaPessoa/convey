@@ -8,6 +8,7 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'
@@ -140,7 +141,7 @@ svyatk <-
 #' @rdname svyatk
 #' @export
 svyatk.survey.design <-
-  function ( formula, design, epsilon = 1, na.rm = FALSE, deff = FALSE , linearized = FALSE , ... ) {
+  function ( formula, design, epsilon = 1, na.rm = FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ... ) {
 
     # collect data
     incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
@@ -202,10 +203,10 @@ svyatk.survey.design <-
     attr(rval, "statistic") <- "atkinson"
     attr(rval,"epsilon")<- epsilon
     if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
-    if ( linearized ) attr(rval,"linearized") <- lin
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+    if ( linearized ) attr( rval , "linearized" ) <- lin
+    if ( influence )  attr( rval , "influence" )  <- sweep( lin , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+    if ( linearized |influence ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
     rval
-
 
   }
 
@@ -278,8 +279,8 @@ svyatk.svyrep.design <-
     attr(rval, "var") <- variance
     attr(rval, "statistic") <- "atkinson"
     attr(rval,"epsilon") <- epsilon
-    if ( is.character(deff) || deff ) attr( rval , "deff" ) <- deff.estimate
     if ( linearized ) attr( rval , "linearized" ) <- lin
+    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
 
     # keep replicates
     if (return.replicates) {
@@ -289,6 +290,9 @@ svyatk.svyrep.design <-
       rval <- list( mean = rval , replicates = qq )
       class( rval ) <- c( "cvystat" , "svrepstat" )
     }
+
+    # add design effect estimate
+    if ( is.character(deff) || deff ) attr( rval , "deff" ) <- deff.estimate
 
     # return object
     rval
