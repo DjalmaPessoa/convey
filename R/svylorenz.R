@@ -14,6 +14,7 @@
 #' @param na.rm Should cases with missing values be dropped? Defaults to \code{FALSE}.
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... additional arguments passed to \code{plot} methods
 #'
@@ -158,7 +159,7 @@ svylorenzpolygon_wrap <-
 
 #' @rdname svylorenz
 #' @export
-svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1), empirical = FALSE, plot = TRUE, add = FALSE, curve.col = "red", ci = TRUE, alpha = .05, na.rm = FALSE , deff = FALSE , linearized = FALSE , ... ) {
+svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1), empirical = FALSE, plot = TRUE, add = FALSE, curve.col = "red", ci = TRUE, alpha = .05, na.rm = FALSE , deff = FALSE , linearized = FALSE , influence = FALSE , ... ) {
 
   # collect income data
   incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
@@ -236,7 +237,8 @@ svylorenz.survey.design <- function ( formula , design, quantiles = seq(0,1,.1),
   class( rval ) <- c( "cvystat" , "svystat" )
   if ( is.character(deff) || deff ) attr(rval,"deff") <- deff.estimate
   if ( linearized ) attr(rval,"linearized") <- lin.matrix
-  if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
+  if ( influence )  attr( rval , "influence" )  <- sweep( lin.matrix , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+  if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
 
   # calculate empirical curve
   if (empirical) empirical.lorenz <- emp.interp( incvar , w )
