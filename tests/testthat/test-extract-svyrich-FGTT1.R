@@ -40,10 +40,12 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
   des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
   # calculate estimates
-  a1 <- svyrich( ~eqincome , des_eusilc , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-  a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-  b1 <- svyrich( ~eqincome , des_eusilc_rep , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-  b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
+  a1 <- svyrich( ~eqincome , des_eusilc , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+  a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
+  a2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = FALSE )
+  b1 <- svyrich( ~eqincome , des_eusilc_rep , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+  b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
+  b2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = FALSE )
 
   # calculate auxilliary tests statistics
   cv_diff1 <- abs( cv( a1 ) - cv( b1 ) )
@@ -71,7 +73,14 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
     expect_equal( sum( confint( a2 )[,2] >= coef( a2 ) ) , length( coef( a2 ) ) )
     expect_equal( sum( confint( b2 )[,1] <= coef( b2 ) ) , length( coef( b2 ) ) )
     expect_equal( sum( confint( b2 )[,2] >= coef( b2 ) ) , length( coef( b2 ) ) )
-    
+
+    # check equality of linearized variables
+    expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
+    # check equality vcov diagonals
+    expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
+    expect_equal( diag( vcov( b2 ) ) , suppressWarnings( diag( vcov( b2.nocov ) ) ) )
+
   } )
 
   ### test 2: income data from eusilc --- database-backed design object
@@ -106,8 +115,8 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
     dbd_eusilc <- convey_prep( dbd_eusilc )
 
     # calculate estimates
-    c1 <- svyrich( ~eqincome , dbd_eusilc , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-    c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , comvat = TRUE )
+    c1 <- svyrich( ~eqincome , dbd_eusilc , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+    c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
 
     # remove table and close connection to database
     dbRemoveTable( conn , 'eusilc' )
@@ -120,17 +129,27 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
     expect_equal( SE( a2 ) , SE( c2 ) )
     expect_equal( deff( a1 ) , deff( c1 ) )
     expect_equal( deff( a2 ) , deff( c2 ) )
+    expect_equal( vcov( a2 ) , vcov( c2 ) )
 
-    
+    # check equality of linearized variables
+    expect_equal( attr( c1 , "linearized" ) , attr( a1 , "linearized" ) )
+    expect_equal( attr( c1 , "linearized" ) , attr( b1 , "linearized" ) )
+
+    # check equality of indices
+    expect_equal( attr( a1 , "index" ) , attr( c1 , "index" ) )
+
+    # check equality of linearized variables
+    expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
   } )
 
   ### test 3: compare subsetted objects to svyby objects
 
   # calculate estimates
-  sub_des <- svyrich( ~eqincome , design = subset( des_eusilc , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-  sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-  sub_rep <- svyrich( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-  sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
+  sub_des <- svyrich( ~eqincome , design = subset( des_eusilc , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+  sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
+  sub_rep <- svyrich( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+  sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
 
   # perform tests
   test_that("subsets equal svyby",{
@@ -156,7 +175,13 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
     cv_diff <- abs( cv( sub_des ) - cv( sby_rep )[1] )
     expect_lte( cv_diff , .5 )
 
-    
+    # check equality of linearized variables
+    expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+    # check equality of linearized variables
+    expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+    expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
+
   } )
 
   ### test 4: compare subsetted objects to svyby objects
@@ -207,10 +232,10 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
     dbd_eusilc_rep <- convey_prep( dbd_eusilc_rep )
 
     # calculate estimates
-    sub_dbd <- svyrich( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-    sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-    sub_dbr <- svyrich( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
-    sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE )
+    sub_dbd <- svyrich( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+    sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
+    sub_dbr <- svyrich( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , linearized = TRUE )
+    sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svyrich , g = this.g , abs_thresh = 20000 , type_thresh = this.threshold , type_measure = "FGTT1" , deff = TRUE , covmat = TRUE )
 
     # remove table and disconnect from database
     dbRemoveTable( conn , 'eusilc' )
@@ -235,6 +260,9 @@ for ( this.threshold in c( "abs", "relq","relm") ) for ( this.g in c(0,1) )  {
     expect_equal( as.numeric( deff( sub_dbd ) ) , as.numeric( deff( sby_dbd ) )[1] )
     expect_equal( as.numeric( deff( sub_dbr ) ) , as.numeric( deff( sby_dbr ) )[1] )
 
+    # check equality of linearized variables
+    expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_des , "linearized" ) )
+    expect_equal( attr( sub_dbr , "linearized" ) , attr( sub_rep , "linearized" ) )
 
   } )
 

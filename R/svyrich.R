@@ -14,6 +14,7 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... passed to \code{svyarpt}
 #'
@@ -153,7 +154,7 @@ svyrich <-
 #' @rdname svyrich
 #' @export
 svyrich.survey.design <-
-  function(formula, design, type_measure , g, type_thresh="abs",  abs_thresh=NULL, percent = 1.5 , quantiles = .50 , thresh = FALSE , na.rm = FALSE, deff = FALSE , linearized = FALSE , ...){
+  function(formula, design, type_measure , g, type_thresh="abs",  abs_thresh=NULL, percent = 1.5 , quantiles = .50 , thresh = FALSE , na.rm = FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ...){
 
     # check for convey_prep
     if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
@@ -286,7 +287,8 @@ svyrich.survey.design <-
     if(thresh) attr(rval, "thresh") <- th
     if ( is.character(deff) || deff ) attr( rval , "deff") <- deff.estimate
     if ( linearized ) attr(rval, "linearized") <- richlin
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( richlin ) )
+    if ( influence )  attr( rval , "influence" )  <- sweep( richlin , 1 , full_design$prob[ is.finite( full_design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( richlin ) )
     rval
 
   }
