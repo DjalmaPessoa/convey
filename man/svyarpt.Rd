@@ -17,6 +17,7 @@ svyarpt(formula, design, ...)
   na.rm = FALSE,
   deff = FALSE,
   linearized = FALSE,
+  influence = FALSE,
   ...
 )
 
@@ -49,7 +50,9 @@ svyarpt(formula, design, ...)
 
 \item{deff}{Return the design effect (see \code{survey::svymean})}
 
-\item{linearized}{Should a matrix of linearized variables be returned}
+\item{linearized}{Should a matrix of linearized variables be returned?}
+
+\item{influence}{Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})}
 
 \item{return.replicates}{Return the replicate estimates?}
 }

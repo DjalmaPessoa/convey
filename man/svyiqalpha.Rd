@@ -12,17 +12,18 @@ svyiqalpha(formula, design, ...)
 \method{svyiqalpha}{survey.design}(
   formula,
   design,
-  alpha,
+  alpha = 0.5,
   na.rm = FALSE,
   deff = FALSE,
   linearized = FALSE,
+  influence = FALSE,
   ...
 )
 
 \method{svyiqalpha}{svyrep.design}(
   formula,
   design,
-  alpha,
+  alpha = 0.5,
   na.rm = FALSE,
   deff = FALSE,
   linearized = FALSE,
@@ -37,7 +38,7 @@ svyiqalpha(formula, design, ...)
 
 \item{design}{a design object of class \code{survey.design} or class \code{svyrep.design} from the \code{survey} library.}
 
-\item{...}{arguments passed on to `survey::svyquantile`}
+\item{...}{future expansion. not used.`}
 
 \item{alpha}{the order of the quantile}
 
@@ -46,6 +47,8 @@ svyiqalpha(formula, design, ...)
 \item{deff}{Return the design effect (see \code{survey::svymean})}
 
 \item{linearized}{Should a matrix of linearized variables be returned}
+
+\item{influence}{Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})}
 
 \item{return.replicates}{Return the replicate estimates?}
 }
