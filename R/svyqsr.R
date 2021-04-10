@@ -14,6 +14,7 @@
 #' @param lower_tot return the lowest earners total
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'
@@ -104,7 +105,7 @@ svyqsr <-
 #' @rdname svyqsr
 #' @export
 svyqsr.survey.design <-
-  function(formula, design, alpha1 = 0.2 , alpha2 = ( 1 - alpha1 ) , na.rm=FALSE, upper_quant = FALSE, lower_quant = FALSE, upper_tot = FALSE, lower_tot = FALSE, deff = FALSE , linearized = FALSE , ...) {
+  function(formula, design, alpha1 = 0.2 , alpha2 = ( 1 - alpha1 ) , na.rm=FALSE, upper_quant = FALSE, lower_quant = FALSE, upper_tot = FALSE, lower_tot = FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ...) {
 
     # test for convey_prep
     if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
@@ -205,7 +206,8 @@ svyqsr.survey.design <-
     if(lower_tot)  attr(rval, "lower_tot") <- totS20
     if ( is.character(deff) || deff ) attr(rval,"deff") <- deff.estimate
     if ( linearized ) attr(rval, "linearized") <- lin
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+    if ( influence )  attr( rval , "influence" )  <- sweep( lin , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
     rval
 
   }
