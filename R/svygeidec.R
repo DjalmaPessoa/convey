@@ -9,6 +9,7 @@
 #' @param na.rm Should cases with missing values be dropped? Observations containing missing values in income or group variables will be dropped.
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'
@@ -131,7 +132,7 @@ svygeidec <-
 #' @rdname svygeidec
 #' @export
 svygeidec.survey.design <-
-  function ( formula, subgroup, design, epsilon = 1, na.rm = FALSE, deff = FALSE , linearized = FALSE , ... ) {
+  function ( formula, subgroup, design, epsilon = 1, na.rm = FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ... ) {
 
     # collect data
     incvar <- model.frame(formula, design$variables, na.action = na.pass)[,]
@@ -261,12 +262,13 @@ svygeidec.survey.design <-
     # build result object
     rval <- c( estimates )
     attr(rval, "var") <- variance
-    attr(rval, "statistic") <- "jdiv decomposition"
+    attr(rval, "statistic") <- "gei decomposition"
     attr(rval,"group") <- as.character( subgroup )[[2]]
     attr(rval,"epsilon") <- epsilon
     class(rval) <- c( "cvystat" , "svystat" )
     if ( linearized ) attr(rval,"linearized") <- lin.matrix
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
+    if ( influence )  attr( rval , "influence" )  <- sweep( lin.matrix , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
     if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
     rval
 

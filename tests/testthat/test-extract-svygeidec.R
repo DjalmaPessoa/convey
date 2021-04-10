@@ -30,11 +30,13 @@ for ( this.epsilon in c(0,.5,1,2) ) {
   des_eusilc_rep <- subset( des_eusilc_rep , eqincome > 0 )
 
   # calculate estimates
-  a1 <- svygeidec( ~eqincome , des_eusilc , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  a2 <- svyby( ~eqincome , ~rb090, des_eusilc , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  b1 <- svygeidec( ~eqincome , des_eusilc_rep , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  b2 <- svyby( ~eqincome , ~rb090, des_eusilc_rep , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  d1 <- svygei( ~eqincome , des_eusilc , epsilon = this.epsilon , deff = TRUE )
+  a1 <- svygeidec( ~eqincome , des_eusilc , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+  a2 <- svyby( ~eqincome , ~rb090, des_eusilc , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
+  a2.nocov <- svyby( ~eqincome , ~rb090, des_eusilc , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = FALSE )
+  b1 <- svygeidec( ~eqincome , des_eusilc_rep , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+  b2 <- svyby( ~eqincome , ~rb090, des_eusilc_rep , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
+  b2.nocov <- svyby( ~eqincome , ~rb090, des_eusilc_rep , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = FALSE )
+  d1 <- svygei( ~eqincome , des_eusilc , epsilon = this.epsilon , deff = TRUE , linearized = TRUE )
   d2 <- svyby( ~eqincome , ~rb090, des_eusilc , svygei , epsilon = this.epsilon , deff = TRUE )
 
   # calculate auxilliary tests statistics
@@ -58,10 +60,18 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     expect_equal( coef( a1 )[[1]] , coef( d1 )[[1]] )
     expect_equal( as.numeric( coef( a2 )[1:2] ) , as.numeric( coef( d2 ) ) )
 
+    # check equality of linearized variables
+    expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+    expect_equal( attr( a1 , "index" ) , attr( b1 , "index" ) )
+
+    # check equality vcov diagonals
+    expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
+    expect_equal( diag( vcov( b2 ) ) , suppressWarnings( diag( vcov( b2.nocov ) ) ) )
 
     # compare with svygei
     expect_equal( coef( a1 )[[1]] , coef( d1 )[[1]] )
     expect_equal( SE( a1 )[[1]] , SE( d1 )[[1]] )
+    expect_equal( as.numeric( attr( a1 , "linearized" )[,1,drop=FALSE] ) , as.numeric( attr( d1 , "linearized" ) ) )
     expect_equal( as.numeric( SE( a2 )[,1] ) , as.numeric( SE( d2 ) ) )
 
   } )
@@ -101,8 +111,8 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     dbd_eusilc <- subset( dbd_eusilc , eqincome >0 )
 
     # calculate estimates
-    c1 <- svygeidec( ~eqincome , dbd_eusilc , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-    c2 <- svyby( ~eqincome , ~rb090, dbd_eusilc , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
+    c1 <- svygeidec( ~eqincome , dbd_eusilc , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+    c2 <- svyby( ~eqincome , ~rb090, dbd_eusilc , svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
 
     # remove table and close connection to database
     dbRemoveTable( conn , 'eusilc' )
@@ -116,15 +126,19 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     expect_equal( deff( a1 ) , deff( c1 ) )
     expect_equal( deff( a2 ) , deff( c2 )[ 2:1 , ] )
 
+    # check equality of linearized variables
+    expect_equal( attr( c1 , "linearized" ) , attr( a1 , "linearized" ) )
+    expect_equal( attr( c1 , "index" ) , attr( a1 , "index" ) )
+
   } )
 
   ### test 3: compare subsetted objects to svyby objects
 
   # calculate estimates
-  sub_des <- svygeidec( ~eqincome , design = subset( des_eusilc , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  sby_des <- svyby( ~eqincome, by = ~rb090, design = des_eusilc, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  sub_rep <- svygeidec( ~eqincome , design = subset( des_eusilc_rep , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-  sby_rep <- svyby( ~eqincome, by = ~rb090, design = des_eusilc_rep, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
+  sub_des <- svygeidec( ~eqincome , design = subset( des_eusilc , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+  sby_des <- svyby( ~eqincome, by = ~rb090, design = des_eusilc, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
+  sub_rep <- svygeidec( ~eqincome , design = subset( des_eusilc_rep , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+  sby_rep <- svyby( ~eqincome, by = ~rb090, design = des_eusilc_rep, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
 
   # perform tests
   test_that("subsets equal svyby",{
@@ -137,19 +151,21 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     expect_equal( as.numeric( SE( sub_des ) ) , as.numeric( SE( sby_des[1,] ) ) )
     expect_equal( as.numeric( SE( sub_rep ) ) , as.numeric( SE( sby_rep[1,] ) ) )
 
-    # domain vs svyby: DEFFs must be equal
-    expect_equal( as.numeric( deff( sub_des ) ) , as.numeric( deff( sby_des[1,] ) ) )
-    expect_equal( as.numeric( deff( sub_rep ) ) , as.numeric( deff( sby_rep[1,] ) ) )
-
     # domain vs svyby and svydesign vs svyrepdesign:
     # coefficients should match across svydesign
-    expect_equal( coef( sub_des ) , coef( sub_rep ) )
-    expect_equal( coef( sby_des ) , coef( sby_rep ) )
+    expect_equal( as.numeric( coef( sub_des ) ) , as.numeric( coef( sby_rep[1,] ) ) )
 
     # domain vs svyby and svydesign vs svyrepdesign:
     # coefficients of variation should be within five percent
     cv_diff <- max( abs( cv( sub_des ) - cv( sby_rep )[1,] ) )
-    # expect_lte( cv_diff , .05 )
+    expect_lte( cv_diff , .10 )
+
+    # check equality of linearized variables
+    expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+    # check equality of variances
+    expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+    expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
 
   } )
 
@@ -205,10 +221,10 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     dbd_eusilc_rep <- subset( dbd_eusilc_rep , eqincome >0 )
 
     # calculate estimates
-    sub_dbd <- svygeidec( ~eqincome , design = subset( dbd_eusilc , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-    sby_dbd <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-    sub_dbr <- svygeidec( ~eqincome , design = subset( dbd_eusilc_rep , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
-    sby_dbr <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc_rep, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE )
+    sub_dbd <- svygeidec( ~eqincome , design = subset( dbd_eusilc , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+    sby_dbd <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
+    sub_dbr <- svygeidec( ~eqincome , design = subset( dbd_eusilc_rep , rb090 == "male" ) , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , linearized = TRUE )
+    sby_dbr <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc_rep, FUN = svygeidec , epsilon = this.epsilon , subgroup = ~db040 , deff = TRUE , covmat = TRUE )
 
     # remove table and disconnect from database
     dbRemoveTable( conn , 'eusilc' )
@@ -221,6 +237,8 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     expect_equal( SE( sub_rep ) , SE( sub_dbr ) )
     expect_equal( deff( sub_des ) , deff( sub_dbd ) )
     expect_equal( deff( sub_rep ) , deff( sub_dbr ) )
+    expect_equal( vcov( sub_des ) , vcov( sub_dbd ) )
+    expect_equal( vcov( sub_rep ) , vcov( sub_dbr ) )
 
     # compare database-backed subsetted objects to database-backed svyby objects
     # dbi subsets equal dbi svyby
@@ -228,6 +246,18 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     expect_equal( as.numeric( coef( sub_dbr ) ) , as.numeric( coef( sby_dbr[2,] ) ) )
     expect_equal( as.numeric( SE( sub_dbd ) ) , as.numeric( SE( sby_dbd[2,] ) ) )
     expect_equal( as.numeric( SE( sub_dbr ) ) , as.numeric( SE( sby_dbr[2,] ) ) )
+    expect_equal( vcov( sub_dbd ) , vcov( sub_des ) )
+    expect_equal( vcov( sub_dbr ) , vcov( sub_rep ) )
+
+    # compare equality of linearized variables
+    expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_dbr , "linearized" ) )
+    expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_des , "linearized" ) )
+    expect_equal( attr( sub_dbr , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+    # compare equality of indices
+    expect_equal( attr( sub_dbd , "index" ) , attr( sub_dbr , "index" ) )
+    expect_equal( attr( sub_dbd , "index" ) , attr( sub_des , "index" ) )
+    expect_equal( attr( sub_dbr , "index" ) , attr( sub_rep , "index" ) )
 
 
   } )
