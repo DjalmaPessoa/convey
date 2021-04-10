@@ -6,20 +6,20 @@ library( testthat )
 # library( vardpoor )
 
 # return test context
-context( "svywatts-relq output survey.design and svyrep.design" )
+context( paste0( "svywatts-relq output survey.design and svyrep.design" ) )
 
 ### test 1: test if funtion works on unweighted objects
 
 # load data
 data("api")
-
 # set up convey design
-expect_warning( dstrat1<-convey_prep(svydesign( id=~1,data=apistrat) ) )
+suppressWarnings( dstrat1<-svydesign( id=~1,data=apistrat) )
+dstrat1<-convey_prep( dstrat1 )
 
 # perform tests
-test_that( "svywatts works on unweighted designs" , {
-  expect_false( is.na ( coef( svywatts( ~api00, design=dstrat1 , type_thresh = "relq" , deff = TRUE ) ) ) )
-  expect_false( is.na ( SE( svywatts( ~api00, design=dstrat1 , type_thresh = "relq" , deff = TRUE ) ) ) )
+test_that( paste0( "svywatts works on unweighted designs"), {
+  expect_false( is.na ( coef( svywatts( ~api00, design=dstrat1 , percent = .6 , type_thresh = "relq" ) ) ) )
+  expect_false( is.na ( SE( svywatts( ~api00, design=dstrat1 , percent = .6 , type_thresh = "relq" ) ) ) )
 } )
 
 ### test 2: income data from eusilc --- data.frame-backed design object
@@ -36,15 +36,17 @@ des_eusilc_rep <-as.svrepdesign( des_eusilc , type= "bootstrap" , replicates = 5
 des_eusilc <- convey_prep( des_eusilc )
 des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
-# filter positive
+# prepare for convey
 des_eusilc <- subset( des_eusilc , eqincome > 0 )
 des_eusilc_rep <- subset( des_eusilc_rep , eqincome > 0 )
 
 # calculate estimates
-a1 <- svywatts( ~eqincome , des_eusilc , type_thresh = "relq" , deff = TRUE )
-a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svywatts , type_thresh = "relq" , deff = TRUE )
-b1 <- svywatts( ~eqincome , des_eusilc_rep , type_thresh = "relq" , deff = TRUE )
-b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svywatts , type_thresh = "relq" , deff = TRUE )
+a1 <- svywatts( ~eqincome , des_eusilc , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+a2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc , svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = FALSE )
+b1 <- svywatts( ~eqincome , des_eusilc_rep , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+b2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = FALSE )
 
 # calculate auxilliary tests statistics
 cv_diff1 <- abs( cv( a1 ) - cv( b1 ) )
@@ -72,7 +74,14 @@ test_that( "output svywatts" , {
   expect_equal( sum( confint( a2 )[,2] >= coef( a2 ) ) , length( coef( a2 ) ) )
   expect_equal( sum( confint( b2 )[,1] <= coef( b2 ) ) , length( coef( b2 ) ) )
   expect_equal( sum( confint( b2 )[,2] >= coef( b2 ) ) , length( coef( b2 ) ) )
-  
+
+  # check equality of linearized variables
+  expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
+  # check equality vcov diagonals
+  expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
+  expect_equal( diag( vcov( b2 ) ) , suppressWarnings( diag( vcov( b2.nocov ) ) ) )
+
 } )
 
 ### test 2: income data from eusilc --- database-backed design object
@@ -106,12 +115,13 @@ test_that("database svywatts",{
   # prepare for convey
   dbd_eusilc <- convey_prep( dbd_eusilc )
 
-  # filter positive
+  # prepare for convey
   dbd_eusilc <- subset( dbd_eusilc , eqincome > 0 )
 
   # calculate estimates
-  c1 <- svywatts( ~eqincome , dbd_eusilc , type_thresh = "relq" , deff = TRUE )
-  c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svywatts , type_thresh = "relq" , deff = TRUE )
+  c1 <- svywatts( ~eqincome , dbd_eusilc , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+  c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+  c2.nocov <- svyby( ~eqincome , ~hsize, dbd_eusilc , svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE )
 
   # remove table and close connection to database
   dbRemoveTable( conn , 'eusilc' )
@@ -125,17 +135,27 @@ test_that("database svywatts",{
   expect_equal( deff( a1 ) , deff( c1 ) )
   expect_equal( deff( a2 ) , deff( c2 ) )
   expect_equal( vcov( a2 ) , vcov( c2 ) )
+  expect_equal( suppressWarnings( vcov( a2.nocov ) ) , suppressWarnings( vcov( c2.nocov ) ) )
 
-    
+  # check equality of linearized variables
+  expect_equal( attr( c1 , "linearized" ) , attr( a1 , "linearized" ) )
+  expect_equal( attr( c1 , "linearized" ) , attr( b1 , "linearized" ) )
+
+  # check equality of indices
+  expect_equal( attr( a1 , "index" ) , attr( c1 , "index" ) )
+
+  # check equality of linearized variables
+  expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
 } )
 
 ### test 3: compare subsetted objects to svyby objects
 
 # calculate estimates
-sub_des <- svywatts( ~eqincome , design = subset( des_eusilc , hsize == 1) , type_thresh = "relq" , deff = TRUE )
-sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svywatts , type_thresh = "relq" , deff = TRUE )
-sub_rep <- svywatts( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , type_thresh = "relq" , deff = TRUE )
-sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svywatts , type_thresh = "relq" , deff = TRUE )
+sub_des <- svywatts( ~eqincome , design = subset( des_eusilc , hsize == 1) , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized  = TRUE )
+sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+sub_rep <- svywatts( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
 
 # perform tests
 test_that("subsets equal svyby",{
@@ -161,6 +181,12 @@ test_that("subsets equal svyby",{
   cv_diff <- abs( cv( sub_des ) - cv( sby_rep )[1] )
   expect_lte( cv_diff , .5 )
 
+  # check equality of linearized variables
+  expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+  # check equality of linearized variables
+  expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+  expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
 
 } )
 
@@ -211,15 +237,15 @@ test_that("dbi subsets equal non-dbi subsets",{
   dbd_eusilc <- convey_prep( dbd_eusilc )
   dbd_eusilc_rep <- convey_prep( dbd_eusilc_rep )
 
-  # filter positive
+  # prepare for convey
   dbd_eusilc <- subset( dbd_eusilc , eqincome > 0 )
   dbd_eusilc_rep <- subset( dbd_eusilc_rep , eqincome > 0 )
 
   # calculate estimates
-  sub_dbd <- svywatts( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , type_thresh = "relq" , deff = TRUE )
-  sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svywatts , type_thresh = "relq" , deff = TRUE )
-  sub_dbr <- svywatts( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , type_thresh = "relq" , deff = TRUE )
-  sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svywatts , type_thresh = "relq" , deff = TRUE )
+  sub_dbd <- svywatts( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+  sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+  sub_dbr <- svywatts( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+  sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svywatts , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
 
   # remove table and disconnect from database
   dbRemoveTable( conn , 'eusilc' )
@@ -232,8 +258,8 @@ test_that("dbi subsets equal non-dbi subsets",{
   expect_equal( SE( sub_rep ) , SE( sub_dbr ) )
   expect_equal( deff( sub_des ) , deff( sub_dbd ) )
   expect_equal( deff( sub_rep ) , deff( sub_dbr ) )
-  expect_equal( vcov( sub_des ) , vcov( sub_dbd ) )
-  expect_equal( vcov( sub_rep ) , vcov( sub_dbr ) )
+  expect_equal( vcov( sby_des ) , vcov( sby_dbd ) )
+  expect_equal( vcov( sby_rep ) , vcov( sby_dbr ) )
 
   # compare database-backed subsetted objects to database-backed svyby objects
   # dbi subsets equal dbi svyby
@@ -243,9 +269,10 @@ test_that("dbi subsets equal non-dbi subsets",{
   expect_equal( as.numeric( SE( sub_dbr ) ) , as.numeric( SE( sby_dbr ) )[1] )
   expect_equal( as.numeric( deff( sub_dbd ) ) , as.numeric( deff( sby_dbd ) )[1] )
   expect_equal( as.numeric( deff( sub_dbr ) ) , as.numeric( deff( sby_dbr ) )[1] )
-  expect_equal( as.numeric( vcov( sub_dbd ) ) , as.numeric( vcov( sby_dbd ) )[1] )
-  expect_equal( as.numeric( vcov( sub_dbr ) ) , as.numeric( vcov( sby_dbr ) )[1] )
 
-  
+  # check equality of linearized variables
+  expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_des , "linearized" ) )
+  expect_equal( attr( sub_dbr , "linearized" ) , attr( sub_rep , "linearized" ) )
+
 } )
 
