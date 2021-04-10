@@ -6,7 +6,7 @@ library( testthat )
 # library( vardpoor )
 
 # run code for each level of g
-for ( this.g in c(0,1,2) )  {
+for ( this.g in c(0,1,2) ) {
 
   # return test context
   context( paste0( "svyfgt-abs  g=", this.g , " output survey.design and svyrep.design" ) )
@@ -41,9 +41,11 @@ for ( this.g in c(0,1,2) )  {
 
   # calculate estimates
   a1 <- svyfgt( ~eqincome , des_eusilc , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized = TRUE )
-  a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+  a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
+  a2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = FALSE )
   b1 <- svyfgt( ~eqincome , des_eusilc_rep , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized = TRUE )
-  b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+  b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
+  b2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = FALSE )
 
   # calculate auxilliary tests statistics
   cv_diff1 <- abs( cv( a1 ) - cv( b1 ) )
@@ -74,6 +76,10 @@ for ( this.g in c(0,1,2) )  {
 
     # check equality of linearized variables
     expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
+    # check equality vcov diagonals
+    expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
+    expect_equal( diag( vcov( b2 ) ) , suppressWarnings( diag( vcov( b2.nocov ) ) ) )
 
   } )
 
@@ -110,7 +116,8 @@ for ( this.g in c(0,1,2) )  {
 
     # calculate estimates
     c1 <- svyfgt( ~eqincome , dbd_eusilc , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized = TRUE )
-    c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+    c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
+    c2.nocov <- svyby( ~eqincome , ~hsize, dbd_eusilc , svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
 
     # remove table and close connection to database
     dbRemoveTable( conn , 'eusilc' )
@@ -124,6 +131,7 @@ for ( this.g in c(0,1,2) )  {
     expect_equal( deff( a1 ) , deff( c1 ) )
     expect_equal( deff( a2 ) , deff( c2 ) )
     expect_equal( vcov( a2 ) , vcov( c2 ) )
+    expect_equal( suppressWarnings( vcov( a2.nocov ) ) , suppressWarnings( vcov( c2.nocov ) ) )
 
     # check equality of linearized variables
     expect_equal( attr( c1 , "linearized" ) , attr( a1 , "linearized" ) )
@@ -132,15 +140,18 @@ for ( this.g in c(0,1,2) )  {
     # check equality of indices
     expect_equal( attr( a1 , "index" ) , attr( c1 , "index" ) )
 
+    # check equality of linearized variables
+    expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
   } )
 
   ### test 3: compare subsetted objects to svyby objects
 
   # calculate estimates
   sub_des <- svyfgt( ~eqincome , design = subset( des_eusilc , hsize == 1) , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized  = TRUE )
-  sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+  sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
   sub_rep <- svyfgt( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized = TRUE )
-  sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+  sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
 
   # perform tests
   test_that("subsets equal svyby",{
@@ -168,6 +179,10 @@ for ( this.g in c(0,1,2) )  {
 
     # check equality of linearized variables
     expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+    # check equality of linearized variables
+    expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+    expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
 
   } )
 
@@ -220,9 +235,9 @@ for ( this.g in c(0,1,2) )  {
 
     # calculate estimates
     sub_dbd <- svyfgt( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized = TRUE )
-    sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+    sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
     sub_dbr <- svyfgt( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , linearized = TRUE )
-    sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE )
+    sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svyfgt , g = this.g , abs_thresh = 7000 , type_thresh = "abs" , deff = TRUE , covmat = TRUE )
 
     # remove table and disconnect from database
     dbRemoveTable( conn , 'eusilc' )
