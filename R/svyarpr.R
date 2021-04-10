@@ -9,6 +9,7 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... arguments passed on to `svyarpt`
 #'
@@ -97,7 +98,7 @@ svyarpr <- function(formula, design, ...) {
 #' @rdname svyarpr
 #' @export
 svyarpr.survey.design <-
-  function(formula, design, quantiles = 0.5, percent = 0.6, na.rm=FALSE, deff = FALSE , linearized = FALSE , ...) {
+  function(formula, design, quantiles = 0.5, percent = 0.6, na.rm=FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ...) {
 
     # test for convey_prep
     if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
@@ -209,7 +210,8 @@ svyarpr.survey.design <-
     attr(rval, "var") <- variance
     attr(rval, "statistic") <- "arpr"
     if ( linearized ) attr(rval, "linearized") <- arprlin
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( arprlin ) )
+    if ( influence )  attr( rval , "influence" )  <- sweep( arprlin , 1 , full_design$prob[ is.finite( full_design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( arprlin ) )
     if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
     rval
 
@@ -282,15 +284,15 @@ svyarpr.svyrep.design <-
       thr <- percent * computeQuantiles( incvec , wi, p = quantiles )
       sum( ( incvec[ ind ] <= thr ) * wi[ ind ] ) / sum( wi[ ind ] )
     } )
+    qq <- as.matrix( qq )
 
-    # compute variance
-    if ( any( is.na( qq ) ) ) variance <- as.matrix( NA ) else {
-      variance <- survey::svrVar( qq , full_design$scale , full_design$rscales , mse = full_design$mse , coef = rval )
-      this.mean <- attr( variance , "means" )
-      variance <- as.matrix( variance )
-      attr( variance , "means" ) <- this.mean
+    # treat missing
+    if ( anyNA( qq ) ) { variance <-  matrix( NA , nrow = 1 , ncol = 1 ) } else {
+      # calculate variance
+      variance <- survey::svrVar( qq, full_design$scale , full_design$rscales, mse = full_design$mse, coef = rval )
     }
     colnames( variance ) <- rownames( variance ) <- strsplit( as.character( formula )[[2]] , ' \\+ ' )[[1]]
+
 
     # compute deff
     if ( is.character(deff) || deff || linearized ) {

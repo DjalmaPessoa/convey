@@ -6,7 +6,7 @@ library( testthat )
 # library( vardpoor )
 
 # return test context
-context( paste0( "arpr output survey.design and svyrep.design" ) )
+context( "arpr output survey.design and svyrep.design" )
 
 ### test 1: test if funtion works on unweighted objects
 
@@ -17,9 +17,9 @@ data("api")
 expect_warning( dstrat1<-convey_prep(svydesign( id=~1,data=apistrat) ) )
 
 # perform tests
-test_that( paste0( "svyarpr works on unweighted designs"), {
-  expect_false( is.na ( coef( svyarpr( ~api00, design=dstrat1 , type_thresh = "abs" ) ) ) )
-  expect_false( is.na ( SE( svyarpr( ~api00, design=dstrat1 , type_thresh = "abs" ) ) ) )
+test_that("svyarpr works on unweighted designs", {
+  expect_false( is.na ( coef( svyarpr( ~api00, design=dstrat1 , epsilon = this.epsilon ) ) ) )
+  expect_false( is.na ( SE( svyarpr( ~api00, design=dstrat1 , epsilon = this.epsilon ) ) ) )
 } )
 
 ### test 2: income data from eusilc --- data.frame-backed design object
@@ -36,15 +36,21 @@ des_eusilc_rep <-as.svrepdesign( des_eusilc , type= "bootstrap" , replicates = 5
 des_eusilc <- convey_prep( des_eusilc )
 des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
+# filter positive
+des_eusilc <- subset( des_eusilc , eqincome > 0 )
+des_eusilc_rep <- subset( des_eusilc_rep , eqincome > 0 )
+
 # calculate estimates
-a1 <- svyarpr( ~eqincome , des_eusilc , deff = TRUE )
-a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svyarpr , deff = TRUE )
-b1 <- svyarpr( ~eqincome , des_eusilc_rep , deff = TRUE )
-b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svyarpr , deff = TRUE )
-d1 <- svyfgt( ~eqincome , des_eusilc , g = 0 , type_thresh = "relq" , deff = TRUE )
-d2 <- svyby( ~eqincome , ~hsize , des_eusilc , svyfgt , g = 0 , type_thresh = "relq" , deff = TRUE )
-e1 <- svyfgt( ~eqincome , des_eusilc_rep , g = 0 , type_thresh = "relq" , deff = TRUE )
-e2 <- svyby( ~eqincome , ~hsize , des_eusilc_rep , svyfgt , g = 0 , type_thresh = "relq" , deff = TRUE )
+a1 <- svyarpr( ~eqincome , des_eusilc , deff = TRUE , linearized = TRUE )
+a2 <- svyby( ~eqincome , ~hsize, des_eusilc, svyarpr , deff = TRUE , covmat = TRUE )
+a2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc, svyarpr , deff = TRUE , covmat = FALSE )
+b1 <- svyarpr( ~eqincome , des_eusilc_rep , deff = TRUE , linearized = TRUE )
+b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep, svyarpr , deff = TRUE , covmat = TRUE )
+b2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc_rep, svyarpr , deff = TRUE , covmat = FALSE )
+d1 <- svyfgt( ~eqincome , des_eusilc , g = 0 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+d2 <- svyby( ~eqincome , ~hsize , des_eusilc , svyfgt , g = 0 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+e1 <- svyfgt( ~eqincome , des_eusilc_rep , g = 0 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+e2 <- svyby( ~eqincome , ~hsize , des_eusilc_rep , svyfgt , g = 0 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
 
 # calculate auxilliary tests statistics
 cv_diff1 <- abs( cv( a1 ) - cv( b1 ) )
@@ -58,12 +64,8 @@ test_that( "output svyarpr" , {
   expect_is( coef( b2 ) ,"numeric" )
   expect_equal( coef( a1 ) , coef( b1 ) )
   expect_equal( coef( a2 ) , coef( b2 ) )
-  expect_equal( as.numeric( coef( a1 ) ) , abs( as.numeric( coef( d1 ) ) ) )
-  expect_equal( as.numeric( coef( d2 ) ) , as.numeric( coef( d2 ) ) )
-  expect_equal( as.numeric( SE( a1 ) ) , as.numeric( SE( d1 ) ) )
-  expect_equal( as.numeric( SE( d2 ) ) , as.numeric( SE( d2 ) ) )
-  # expect_lte( cv_diff1 , coef(a1) * 0.20 )         # the difference between CVs should be less than 5% of the coefficient, otherwise manually set it
-  expect_lte( se_diff2 , max( coef(a2) ) * 0.20 )  # the difference between CVs should be less than 10% of the maximum coefficient, otherwise manually set it
+  expect_lte( cv_diff1 , coef(a1) * .20 )         # the difference between CVs should be less than 5% of the coefficient, otherwise manually set it
+  expect_lte( se_diff2 , max( coef(a2) ) * .20 )  # the difference between CVs should be less than 10% of the maximum coefficient, otherwise manually set it
   expect_is( SE( a1 ) , "matrix" )
   expect_is( SE( a2 ) , "numeric" )
   expect_is( SE( b1 ) , "numeric" )
@@ -76,7 +78,25 @@ test_that( "output svyarpr" , {
   expect_equal( sum( confint( a2 )[,2] >= coef( a2 ) ) , length( coef( a2 ) ) )
   expect_equal( sum( confint( b2 )[,1] <= coef( b2 ) ) , length( coef( b2 ) ) )
   expect_equal( sum( confint( b2 )[,2] >= coef( b2 ) ) , length( coef( b2 ) ) )
-  
+
+  # check equality of linearized variables
+  expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+  expect_equal( attr( a1 , "index" ) , attr( b1 , "index" ) )
+
+  # check equality vcov diagonals
+  expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
+  expect_equal( diag( vcov( b2 ) ) , suppressWarnings( diag( vcov( b2.nocov ) ) ) )
+
+  # compare with svyfgt
+  expect_equal( coef( a1 ) , coef( d1 ) )
+  expect_equal( coef( a2 ) , coef( d2 ) )
+  expect_equal( vcov( a1 ) , vcov( d1 ) )
+  expect_equal( vcov( a2 ) , vcov( d2 ) )
+  expect_equal( coef( b1 ) , coef( e1 ) )
+  expect_equal( coef( b2 ) , coef( e2 ) )
+  expect_equal( vcov( b1 ) , vcov( e1 ) )
+  expect_equal( vcov( b2 ) , vcov( e2 ) )
+
 } )
 
 ### test 2: income data from eusilc --- database-backed design object
@@ -110,9 +130,12 @@ test_that("database svyarpr",{
   # prepare for convey
   dbd_eusilc <- convey_prep( dbd_eusilc )
 
+  # filter positive
+  dbd_eusilc <- subset( dbd_eusilc , eqincome > 0 )
+
   # calculate estimates
-  c1 <- svyarpr( ~eqincome , dbd_eusilc , deff = TRUE )
-  c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svyarpr , deff = TRUE )
+  c1 <- svyarpr( ~eqincome , dbd_eusilc , deff = TRUE , linearized = TRUE )
+  c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc, svyarpr , deff = TRUE , covmat = TRUE )
 
   # remove table and close connection to database
   dbRemoveTable( conn , 'eusilc' )
@@ -125,42 +148,53 @@ test_that("database svyarpr",{
   expect_equal( SE( a2 ) , SE( c2 ) )
   expect_equal( deff( a1 ) , deff( c1 ) )
   expect_equal( deff( a2 ) , deff( c2 ) )
+  expect_equal( vcov( a1 ) , vcov( c1 ) )
+  expect_equal( vcov( a2 ) , vcov( c2 ) )
 
-  
+  # test equality of linearized variables
+  expect_equal( attr( a1 , "linearized" ) , attr( c1 , "linearized" ) )
+  expect_equal( attr( a2 , "linearized" ) , attr( c2 , "linearized" ) )
+  expect_equal( attr( a1 , "influence" ) , attr( c1 , "influence" ) )
+  expect_equal( attr( a2 , "influence" ) , attr( c2 , "influence" ) )
+  expect_equal( attr( a1 , "index" ) , attr( c1 , "index" ) )
+  expect_equal( attr( a2 , "index" ) , attr( c2 , "index" ) )
+
 } )
 
 ### test 3: compare subsetted objects to svyby objects
 
 # calculate estimates
-sub_des <- svyarpr( ~eqincome , design = subset( des_eusilc , hsize == 1) , deff = TRUE )
-sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svyarpr , deff = TRUE )
-sub_rep <- svyarpr( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , deff = TRUE )
-sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svyarpr , deff = TRUE )
+sub_des <- svyarpr( ~eqincome , design = subset( des_eusilc , hsize == 1) , deff = TRUE , linearized = TRUE )
+sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svyarpr , deff = TRUE , covmat = TRUE )
+sub_rep <- svyarpr( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , deff = TRUE , linearized = TRUE )
+sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svyarpr , deff = TRUE , covmat = TRUE )
 
 # perform tests
 test_that("subsets equal svyby",{
 
   # domain vs svyby: coefficients must be equal
-  expect_equal( as.numeric( coef( sub_des ) ) , as.numeric( coef( sby_des ) )[1] )
-  expect_equal( as.numeric( coef( sub_rep ) ) , as.numeric( coef( sby_rep ) )[1] )
+  expect_equal( as.numeric( coef( sub_des ) ) , as.numeric( coef( sby_des[1,] ) ) )
+  expect_equal( as.numeric( coef( sub_rep ) ) , as.numeric( coef( sby_rep[1,] ) ) )
 
   # domain vs svyby: SEs must be equal
-  expect_equal( as.numeric( SE( sub_des ) ) , as.numeric( SE( sby_des ) )[1] )
-  expect_equal( as.numeric( SE( sub_rep ) ) , as.numeric( SE( sby_rep ) )[1] )
-
-  # domain vs svyby: DEffs must be equal
-  expect_equal( as.numeric( deff( sub_des ) ) , as.numeric( deff( sby_des ) )[1] )
-  expect_equal( as.numeric( deff( sub_rep ) ) , as.numeric( deff( sby_rep ) )[1] )
+  expect_equal( as.numeric( SE( sub_des ) ) , as.numeric( SE( sby_des[1,] ) ) )
+  expect_equal( as.numeric( SE( sub_rep ) ) , as.numeric( SE( sby_rep[1,] ) ) )
 
   # domain vs svyby and svydesign vs svyrepdesign:
   # coefficients should match across svydesign
-  expect_equal( as.numeric( coef( sub_des ) ) , as.numeric( coef( sby_rep ) )[1] )
+  expect_equal( as.numeric( coef( sub_des ) ) , as.numeric( coef( sby_rep[1,] ) ) )
 
   # domain vs svyby and svydesign vs svyrepdesign:
   # coefficients of variation should be within five percent
-  cv_diff <- abs( cv( sub_des ) - cv( sby_rep )[1] )
-  expect_lte( cv_diff , .5 )
+  cv_diff <- max( abs( cv( sub_des ) - cv( sby_rep )[1] ) )
+  expect_lte( cv_diff , .05 )
 
+  # check equality of linearized variables
+  expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+  # check equality of variances
+  expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+  expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
 
 } )
 
@@ -204,18 +238,21 @@ test_that("dbi subsets equal non-dbi subsets",{
       data = "eusilc" ,
       dbtype="SQLite" ,
       dbname = dbfile ,
-      combined.weights = FALSE
-    )
+      combined.weights = FALSE )
 
   # prepare for convey
   dbd_eusilc <- convey_prep( dbd_eusilc )
   dbd_eusilc_rep <- convey_prep( dbd_eusilc_rep )
 
+  # filter positive incomes
+  dbd_eusilc <- subset( dbd_eusilc , eqincome > 0 )
+  dbd_eusilc_rep <- subset( dbd_eusilc_rep , eqincome > 0 )
+
   # calculate estimates
-  sub_dbd <- svyarpr( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , deff = TRUE )
-  sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svyarpr , deff = TRUE )
-  sub_dbr <- svyarpr( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , deff = TRUE )
-  sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svyarpr , deff = TRUE )
+  sub_dbd <- svyarpr( ~eqincome , design = subset( dbd_eusilc     , hsize == 1) , deff = TRUE , linearized = TRUE )
+  sub_dbr <- svyarpr( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , deff = TRUE , linearized = TRUE )
+  sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc     , FUN = svyarpr , deff = TRUE , covmat = TRUE )
+  sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep , FUN = svyarpr , deff = TRUE , covmat = TRUE )
 
   # remove table and disconnect from database
   dbRemoveTable( conn , 'eusilc' )
@@ -228,18 +265,26 @@ test_that("dbi subsets equal non-dbi subsets",{
   expect_equal( SE( sub_rep ) , SE( sub_dbr ) )
   expect_equal( deff( sub_des ) , deff( sub_dbd ) )
   expect_equal( deff( sub_rep ) , deff( sub_dbr ) )
+  expect_equal( vcov( sub_des ) , vcov( sub_dbd ) )
+  expect_equal( vcov( sub_rep ) , vcov( sub_dbr ) )
 
   # compare database-backed subsetted objects to database-backed svyby objects
   # dbi subsets equal dbi svyby
-  expect_equal( as.numeric( coef( sub_dbd ) ) , as.numeric( coef( sby_dbd ) )[1] )
-  expect_equal( as.numeric( coef( sub_dbr ) ) , as.numeric( coef( sby_dbr ) )[1] )
-  expect_equal( as.numeric( SE( sub_dbd ) ) , as.numeric( SE( sby_dbd ) )[1] )
-  expect_equal( as.numeric( SE( sub_dbr ) ) , as.numeric( SE( sby_dbr ) )[1] )
-  expect_equal( as.numeric( deff( sub_dbd ) ) , as.numeric( deff( sby_dbd ) )[1] )
-  expect_equal( as.numeric( deff( sub_dbr ) ) , as.numeric( deff( sby_dbr ) )[1] )
-  expect_equal( vcov( sby_des ) , vcov( sby_dbd ) )
-  expect_equal( vcov( sby_rep ) , vcov( sby_dbr ) )
+  expect_equal( as.numeric( coef( sub_dbd ) ) , as.numeric( coef( sby_dbd[1,] ) ) )
+  expect_equal( as.numeric( coef( sub_dbr ) ) , as.numeric( coef( sby_dbr[1,] ) ) )
+  expect_equal( as.numeric( SE( sub_dbd ) ) , as.numeric( SE( sby_dbd[1,] ) ) )
+  expect_equal( as.numeric( SE( sub_dbr ) ) , as.numeric( SE( sby_dbr[1,] ) ) )
+  expect_equal( vcov( sub_dbd ) , vcov( sub_des ) )
+  expect_equal( vcov( sub_dbr ) , vcov( sub_rep ) )
 
-  
+  # compare equality of linearized variables
+  expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_dbr , "linearized" ) )
+  expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_des , "linearized" ) )
+  expect_equal( attr( sub_dbr , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+  # compare equality of indices
+  expect_equal( attr( sub_dbd , "index" ) , attr( sub_dbr , "index" ) )
+  expect_equal( attr( sub_dbd , "index" ) , attr( sub_des , "index" ) )
+  expect_equal( attr( sub_dbr , "index" ) , attr( sub_rep , "index" ) )
+
 } )
-
