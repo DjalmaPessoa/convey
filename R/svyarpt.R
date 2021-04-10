@@ -8,7 +8,8 @@
 #' @param percent fraction of the quantile, usually .60
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
-#' @param linearized Should a matrix of linearized variables be returned
+#' @param linearized Should a matrix of linearized variables be returned?
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... arguments passed on to `survey::svyquantile`
 #'
@@ -98,7 +99,7 @@ svyarpt <-
 #' @rdname svyarpt
 #' @export
 svyarpt.survey.design <-
-	function(formula, design, quantiles = 0.5, percent = 0.6,  na.rm = FALSE, deff=FALSE , linearized = FALSE , ...) {
+	function(formula, design, quantiles = 0.5, percent = 0.6,  na.rm = FALSE, deff=FALSE , linearized = FALSE , influence = FALSE , ...) {
 
 		if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
 
@@ -159,7 +160,8 @@ svyarpt.survey.design <-
 		attr( rval , "var" ) <- variance
 		attr( rval , "statistic" ) <- "arpt"
 		if ( linearized ) attr( rval , "linearized" ) <- lin
-		if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+		if ( influence )  attr( rval , "influence" )  <- sweep( lin , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+		if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
 		if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
 		rval
 
