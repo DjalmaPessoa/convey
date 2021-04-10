@@ -14,6 +14,7 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... additional arguments. Currently not used.
 #'
@@ -132,7 +133,7 @@ svyfgtdec <-
 #' @rdname svyfgtdec
 #' @export
 svyfgtdec.survey.design <-
-  function(formula, design, g, type_thresh="abs",  abs_thresh=NULL, percent = .60, quantiles = .50, na.rm = FALSE, thresh = FALSE, deff = FALSE , linearized = FALSE , ...){
+  function(formula, design, g, type_thresh="abs",  abs_thresh=NULL, percent = .60, quantiles = .50, na.rm = FALSE, thresh = FALSE, deff = FALSE , linearized = FALSE , influence = FALSE , ...){
 
     # check for convey_prep
     if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your linearized survey design object immediately after creating it with the svydesign() function.")
@@ -200,7 +201,8 @@ svyfgtdec.survey.design <-
     attr(rval, "statistic") <- paste0("fgt", g , " decomposition")
     if (thresh) attr(rval, "thresh") <- th
     if ( linearized ) attr(rval,"linearized") <- lin.matrix
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
+    if ( influence )  attr( rval , "influence" )  <- sweep( lin.matrix , 1 , full_design$prob[ is.finite( full_design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
     if ( is.character(deff) || deff ) attr( rval , "deff") <- deff.estimate
     class(rval) <- c( "cvystat" , "svrepstat" , "svystat" )
     rval
@@ -211,7 +213,7 @@ svyfgtdec.survey.design <-
 #' @rdname svyfgtdec
 #' @export
 svyfgtdec.svyrep.design <-
-  function(formula, design, g, type_thresh="abs",  abs_thresh=NULL, percent = .60, quantiles = .50, na.rm = FALSE, thresh = FALSE, deff = FALSE , linearized = TRUE , return.replicates = FALSE , ...){
+  function(formula, design, g, type_thresh="abs",  abs_thresh=NULL, percent = .60, quantiles = .50, na.rm = FALSE, thresh = FALSE, deff = FALSE , linearized = FALSE , return.replicates = FALSE , ...){
 
     # svyrep design h function
     h <- function(y,thresh,g) ( ( ( thresh - y ) / thresh )^g ) * ( y <= thresh )
@@ -356,7 +358,7 @@ svyfgtdec.svyrep.design <-
     attr(rval, "statistic") <- paste0("fgt", g , " decomposition")
     if (thresh) attr(rval, "thresh") <- th
     class(rval) <- c( "cvystat" , "svrepstat" , "svystat" )
-    if ( linearized ) attr( rval , "deff") <- lin.matrix
+    if ( linearized ) attr( rval , "linearized") <- lin.matrix
     if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin.matrix ) )
 
     # keep replicates

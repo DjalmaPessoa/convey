@@ -23,16 +23,18 @@ des_eusilc <- convey_prep( des_eusilc )
 des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
 # calculate estimates
-a1 <- svyfgtdec( ~eqincome , des_eusilc , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-a2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-b1 <- svyfgtdec( ~eqincome , des_eusilc_rep , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-b2 <- svyby( ~eqincome , ~rb090, des_eusilc_rep , svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-d1 <- svyfgt( ~eqincome , des_eusilc , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-d2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgt , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-e1 <- svyfgt( ~eqincome , des_eusilc , g = 0 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-e2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgt , g = 0 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-f1 <- svyfgt( ~eqincome , des_eusilc , g = 1 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-f2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgt , g = 1 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
+a1 <- svyfgtdec( ~eqincome , des_eusilc , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+a2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+a2.nocov <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = FALSE )
+b1 <- svyfgtdec( ~eqincome , des_eusilc_rep , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+b2 <- svyby( ~eqincome , ~rb090, des_eusilc_rep , svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+b2.nocov <- svyby( ~eqincome , ~rb090, des_eusilc_rep , svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = FALSE )
+d1 <- svyfgt( ~eqincome , des_eusilc , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE )
+d2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgt , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE )
+e1 <- svyfgt( ~eqincome , des_eusilc , g = 0 , percent = .6 , type_thresh = "relq" , deff = TRUE )
+e2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgt , g = 0 , percent = .6 , type_thresh = "relq" , deff = TRUE )
+f1 <- svyfgt( ~eqincome , des_eusilc , g = 1 , percent = .6 , type_thresh = "relq" , deff = TRUE )
+f2 <- svyby( ~eqincome , ~rb090, des_eusilc , svyfgt , g = 1 , percent = .6 , type_thresh = "relq" , deff = TRUE )
 
 # calculate auxilliary tests statistics
 cv_diff1 <- max( abs( cv( a1 ) - cv( b1 ) ) )
@@ -58,6 +60,15 @@ test_that( "output svyfgtdec" , {
   expect_equal( SE( a1 )[[2]] , SE( e1 )[[1]] )
   expect_equal( coef( a1 )[[3]] , coef( f1 )[[1]] )
   expect_equal( SE( a1 )[[3]] , SE( f1 )[[1]] )
+
+  # check equality of linearized variables
+  expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+  expect_equal( attr( a1 , "index" ) , attr( b1 , "index" ) )
+
+  # check equality vcov diagonals
+  expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
+  expect_equal( diag( vcov( b2 ) ) , suppressWarnings( diag( vcov( b2.nocov ) ) ) )
+
 } )
 
 ### test 2: income data from eusilc --- database-backed design object
@@ -92,8 +103,8 @@ test_that("database svyfgtdec",{
   dbd_eusilc <- convey_prep( dbd_eusilc )
 
   # calculate estimates
-  c1 <- svyfgtdec( ~eqincome , dbd_eusilc , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-  c2 <- svyby( ~eqincome , ~rb090, dbd_eusilc , svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
+  c1 <- svyfgtdec( ~eqincome , dbd_eusilc , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+  c2 <- svyby( ~eqincome , ~rb090, dbd_eusilc , svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
 
   # remove table and close connection to database
   dbRemoveTable( conn , 'eusilc' )
@@ -104,17 +115,22 @@ test_that("database svyfgtdec",{
   expect_equal( coef( a2 ) , coef( c2 )[ match( names( coef( c2 ) ) , names( coef( a2 ) ) ) ] )
   expect_equal( SE( a1 ) , SE( c1 ) )
   expect_equal( SE( a2 ) , SE( c2 )[ 2:1 , ] )
-  
+  expect_equal( deff( a1 ) , deff( c1 ) )
+  expect_equal( deff( a2 ) , deff( c2 )[ 2:1 , ] )
+
+  # check equality of linearized variables
+  expect_equal( attr( c1 , "linearized" ) , attr( a1 , "linearized" ) )
+  expect_equal( attr( c1 , "index" ) , attr( a1 , "index" ) )
 
 } )
 
 ### test 3: compare subsetted objects to svyby objects
 
 # calculate estimates
-sub_des <- svyfgtdec( ~eqincome , design = subset( des_eusilc , rb090 == "male" ) , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-sby_des <- svyby( ~eqincome, by = ~rb090, design = des_eusilc, FUN = svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-sub_rep <- svyfgtdec( ~eqincome , design = subset( des_eusilc_rep , rb090 == "male" ) , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-sby_rep <- svyby( ~eqincome, by = ~rb090, design = des_eusilc_rep, FUN = svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
+sub_des <- svyfgtdec( ~eqincome , design = subset( des_eusilc , rb090 == "male" ) , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+sby_des <- svyby( ~eqincome, by = ~rb090, design = des_eusilc, FUN = svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+sub_rep <- svyfgtdec( ~eqincome , design = subset( des_eusilc_rep , rb090 == "male" ) , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+sby_rep <- svyby( ~eqincome, by = ~rb090, design = des_eusilc_rep, FUN = svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
 
 # perform tests
 test_that("subsets equal svyby",{
@@ -136,7 +152,12 @@ test_that("subsets equal svyby",{
   cv_diff <- max( abs( cv( sub_des ) - cv( sby_rep )[1,] ) )
   expect_lte( cv_diff , .05 )
 
-  
+  # check equality of linearized variables
+  expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+  # check equality of variances
+  expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+  expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
 
 } )
 
@@ -188,10 +209,10 @@ test_that("dbi subsets equal non-dbi subsets",{
   dbd_eusilc_rep <- convey_prep( dbd_eusilc_rep )
 
   # calculate estimates
-  sub_dbd <- svyfgtdec( ~eqincome , design = subset( dbd_eusilc , rb090 == "male" ) , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-  sby_dbd <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc, FUN = svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-  sub_dbr <- svyfgtdec( ~eqincome , design = subset( dbd_eusilc_rep , rb090 == "male" ) , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
-  sby_dbr <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc_rep, FUN = svyfgtdec , g = 2 , percent = 0.6 , quantiles = .5 , type_thresh = "relq" , deff = TRUE )
+  sub_dbd <- svyfgtdec( ~eqincome , design = subset( dbd_eusilc , rb090 == "male" ) , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+  sby_dbd <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc, FUN = svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
+  sub_dbr <- svyfgtdec( ~eqincome , design = subset( dbd_eusilc_rep , rb090 == "male" ) , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , linearized = TRUE )
+  sby_dbr <- svyby( ~eqincome, by = ~rb090, design = dbd_eusilc_rep, FUN = svyfgtdec , g = 2 , percent = .6 , type_thresh = "relq" , deff = TRUE , covmat = TRUE )
 
   # remove table and disconnect from database
   dbRemoveTable( conn , 'eusilc' )
@@ -207,12 +228,23 @@ test_that("dbi subsets equal non-dbi subsets",{
   expect_equal( vcov( sub_des ) , vcov( sub_dbd ) )
   expect_equal( vcov( sub_rep ) , vcov( sub_dbr ) )
 
-
   # compare database-backed subsetted objects to database-backed svyby objects
   # dbi subsets equal dbi svyby
   expect_equal( as.numeric( coef( sub_dbd ) ) , as.numeric( coef( sby_dbd[2,] ) ) )
   expect_equal( as.numeric( coef( sub_dbr ) ) , as.numeric( coef( sby_dbr[2,] ) ) )
   expect_equal( as.numeric( SE( sub_dbd ) ) , as.numeric( SE( sby_dbd[2,] ) ) )
   expect_equal( as.numeric( SE( sub_dbr ) ) , as.numeric( SE( sby_dbr[2,] ) ) )
+  expect_equal( vcov( sub_dbd ) , vcov( sub_des ) )
+  expect_equal( vcov( sub_dbr ) , vcov( sub_rep ) )
+
+  # compare equality of linearized variables
+  expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_dbr , "linearized" ) )
+  expect_equal( attr( sub_dbd , "linearized" ) , attr( sub_des , "linearized" ) )
+  expect_equal( attr( sub_dbr , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+  # compare equality of indices
+  expect_equal( attr( sub_dbd , "index" ) , attr( sub_dbr , "index" ) )
+  expect_equal( attr( sub_dbd , "index" ) , attr( sub_des , "index" ) )
+  expect_equal( attr( sub_dbr , "index" ) , attr( sub_rep , "index" ) )
 
 } )
