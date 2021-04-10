@@ -7,6 +7,7 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'
@@ -96,7 +97,7 @@ svygini <-
 #' @rdname svygini
 #' @export
 svygini.survey.design <-
-  function( formula , design , na.rm=FALSE , deff=FALSE , linearized = FALSE , ... ) {
+  function( formula , design , na.rm=FALSE , deff=FALSE , linearized = FALSE , influence = FALSE , ... ) {
 
     # collect income data
     incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
@@ -152,7 +153,8 @@ svygini.survey.design <-
     attr(rval, "var") <- variance
     attr(rval, "statistic") <- "gini"
     if ( linearized ) attr(rval,"linearized") <- lin
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+    if ( influence )  attr( rval , "influence" )  <- sweep( lin , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
     if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
     rval
 
