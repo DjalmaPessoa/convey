@@ -21,8 +21,8 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
 
   # perform tests
   test_that( paste0( "svychu g=", this.g , " works on unweighted designs"), {
-    expect_false( is.na ( coef( svychu( ~api00, design=dstrat1 , g = this.g , percent = 0.6 , type_thresh = "relm" ) ) ) )
-    expect_false( is.na ( SE( svychu( ~api00, design=dstrat1 , g = this.g , percent = 0.6 , type_thresh = "relm" ) ) ) )
+    expect_false( is.na ( coef( svychu( ~api00, design=dstrat1 , g = this.g , percent = .6 , type_thresh = "relm" ) ) ) )
+    expect_false( is.na ( SE( svychu( ~api00, design=dstrat1 , g = this.g , percent = .6 , type_thresh = "relm" ) ) ) )
   } )
 
   ### test 2: income data from eusilc --- data.frame-backed design object
@@ -40,10 +40,12 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
   des_eusilc_rep <- convey_prep( des_eusilc_rep )
 
   # calculate estimates
-  a1 <- svychu( ~eqincome , des_eusilc , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
-  a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
-  b1 <- svychu( ~eqincome , des_eusilc_rep , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
-  b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
+  a1 <- svychu( ~eqincome , des_eusilc , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
+  a2 <- svyby( ~eqincome , ~hsize, des_eusilc , svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
+  a2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc , svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = FALSE )
+  b1 <- svychu( ~eqincome , des_eusilc_rep , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
+  b2 <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
+  b2.nocov <- svyby( ~eqincome , ~hsize, des_eusilc_rep , svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = FALSE )
 
   # calculate auxilliary tests statistics
   cv_diff1 <- abs( cv( a1 ) - cv( b1 ) )
@@ -74,6 +76,9 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
 
     # check equality of linearized variables
     expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
+    # check equality vcov diagonals
+    expect_equal( diag( vcov( a2 ) ) , suppressWarnings( diag( vcov( a2.nocov ) ) ) )
 
   } )
 
@@ -109,8 +114,9 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
     dbd_eusilc <- convey_prep( dbd_eusilc )
 
     # calculate estimates
-    c1 <- svychu( ~eqincome , dbd_eusilc , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
-    c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
+    c1 <- svychu( ~eqincome , dbd_eusilc , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
+    c2 <- svyby( ~eqincome , ~hsize, dbd_eusilc , svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
+    c2.nocov <- svyby( ~eqincome , ~hsize, dbd_eusilc , svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE )
 
     # remove table and close connection to database
     dbRemoveTable( conn , 'eusilc' )
@@ -124,6 +130,7 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
     expect_equal( deff( a1 ) , deff( c1 ) )
     expect_equal( deff( a2 ) , deff( c2 ) )
     expect_equal( vcov( a2 ) , vcov( c2 ) )
+    expect_equal( suppressWarnings( vcov( a2.nocov ) ) , suppressWarnings( vcov( c2.nocov ) ) )
 
     # check equality of linearized variables
     expect_equal( attr( c1 , "linearized" ) , attr( a1 , "linearized" ) )
@@ -132,15 +139,18 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
     # check equality of indices
     expect_equal( attr( a1 , "index" ) , attr( c1 , "index" ) )
 
+    # check equality of linearized variables
+    expect_equal( attr( a1 , "linearized" ) , attr( b1 , "linearized" ) )
+
   } )
 
   ### test 3: compare subsetted objects to svyby objects
 
   # calculate estimates
-  sub_des <- svychu( ~eqincome , design = subset( des_eusilc , hsize == 1) , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized  = TRUE )
-  sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
-  sub_rep <- svychu( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
-  sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
+  sub_des <- svychu( ~eqincome , design = subset( des_eusilc , hsize == 1) , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized  = TRUE )
+  sby_des <- svyby( ~eqincome, by = ~hsize, design = des_eusilc, FUN = svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
+  sub_rep <- svychu( ~eqincome , design = subset( des_eusilc_rep , hsize == 1) , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
+  sby_rep <- svyby( ~eqincome, by = ~hsize, design = des_eusilc_rep, FUN = svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
 
   # perform tests
   test_that("subsets equal svyby",{
@@ -168,6 +178,10 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
 
     # check equality of linearized variables
     expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )
+
+    # check equality of linearized variables
+    expect_equal( vcov( sub_des )[1] , vcov( sby_des )[1,1] )
+    expect_equal( vcov( sub_rep )[1] , vcov( sby_rep )[1,1] )
 
   } )
 
@@ -219,10 +233,10 @@ for ( this.g in seq(.25,.75, length.out = 3) )  {
     dbd_eusilc_rep <- convey_prep( dbd_eusilc_rep )
 
     # calculate estimates
-    sub_dbd <- svychu( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
-    sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
-    sub_dbr <- svychu( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
-    sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svychu , g = this.g , percent = 0.6 , type_thresh = "relm" , deff = TRUE )
+    sub_dbd <- svychu( ~eqincome , design = subset( dbd_eusilc , hsize == 1) , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
+    sby_dbd <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc, FUN = svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
+    sub_dbr <- svychu( ~eqincome , design = subset( dbd_eusilc_rep , hsize == 1) , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , linearized = TRUE )
+    sby_dbr <- svyby( ~eqincome, by = ~hsize, design = dbd_eusilc_rep, FUN = svychu , g = this.g , percent = .6 , type_thresh = "relm" , deff = TRUE , covmat = TRUE )
 
     # remove table and disconnect from database
     dbRemoveTable( conn , 'eusilc' )
