@@ -72,7 +72,7 @@ svylorenz(formula, design, ...)
 
 \item{linearized}{Should a matrix of linearized variables be returned}
 
-\item{influence}{Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})}
+\item{influence}{Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{svyby}})}
 
 \item{return.replicates}{Return the replicate estimates?}
 }

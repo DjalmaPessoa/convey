@@ -6,7 +6,7 @@ library( testthat )
 # library( vardpoor )
 
 # return test context
-context( paste("svyjdivdec epsilon=" , this.epsilon , "decomposition output survey.design and svyrep.design" ) )
+context( "svyjdivdec decomposition output survey.design and svyrep.design" )
 
 ### test 2: income data from eusilc --- data.frame-backed design object
 

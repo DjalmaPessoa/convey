@@ -84,7 +84,7 @@ svyby.survey.design2 <-
           inflmats[[i]][idxs[[i]], ] <- infs[[i]]
         }
         inflmat <- do.call(cbind, inflmats)
-        covmat.mat <- svyrecvar(inflmat, attr( design , "full_design" )$cluster,
+        covmat.mat <- survey::svyrecvar(inflmat, attr( design , "full_design" )$cluster,
                                 attr( design , "full_design" )$strata, attr( design , "full_design" )$fpc, postStrata = attr( design , "full_design" )$postStrata)
       }
       else {

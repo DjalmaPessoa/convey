@@ -14,7 +14,7 @@
 #' @param lower_tot return the lowest earners total
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
-#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{svyby}})
 #' @param return.replicates Return the replicate estimates?
 #' @param ... future expansion
 #'

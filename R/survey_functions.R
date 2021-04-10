@@ -1,4 +1,6 @@
 #' @importFrom stats approxfun coef deriv model.frame model.matrix na.pass printCoefmat qnorm terms terms.formula update weights formula
+#' @importFrom stats complete.cases confint vcov
+#' @importFrom survey SE cv
 #' @importFrom methods is
 
 # each of the functions below are from the survey library v3.30-3
@@ -19,24 +21,24 @@ computeQuantiles <- function(xx, w, p) {
     cdf(p)
 }
 
-checkConnection <- 
+checkConnection <-
 	function (dbconnection, error = TRUE) {
-		
+
 		if (is(dbconnection, "DBIConnection")) {
-			if (!DBI::dbIsValid(dbconnection)) 
-				if (error) 
+			if (!DBI::dbIsValid(dbconnection))
+				if (error)
 					stop("Database connection is closed")
 				else return(FALSE)
 		} else {
-		
+
 		}
 		invisible(TRUE)
 	}
 
-getvars <- function (formula, dbconnection, tables, db.only = TRUE, updates = NULL, 
+getvars <- function (formula, dbconnection, tables, db.only = TRUE, updates = NULL,
     subset = NULL) {
     checkConnection(dbconnection)
-    if (is.null(formula)) 
+    if (is.null(formula))
         return(NULL)
     if (inherits(formula, "formula")) {
         var0 <- all.vars(formula)
@@ -53,17 +55,17 @@ getvars <- function (formula, dbconnection, tables, db.only = TRUE, updates = NU
     }
     else {
         query <- sub("@tab@", tables, "select * from @tab@ limit 1")
-        if (is(dbconnection, "DBIConnection")) 
+        if (is(dbconnection, "DBIConnection"))
             oneline <- DBI::dbGetQuery(dbconnection, query)
         else oneline <- RODBC::sqlQuery(dbconnection, query)
         in.db <- infilter$varlist[infilter$varlist %in% names(oneline)]
     }
-    query <- paste("select", paste(in.db, collapse = ", "), "from", 
+    query <- paste("select", paste(in.db, collapse = ", "), "from",
         tables)
-    if (is(dbconnection, "DBIConnection")) 
+    if (is(dbconnection, "DBIConnection"))
         df <- DBI::dbGetQuery(dbconnection, query)
     else df <- RODBC::sqlQuery(dbconnection, query)
-    if (!is.null(subset)) 
+    if (!is.null(subset))
         df <- df[subset, , drop = FALSE]
     df <- updatesOutfilter(df, var0, infilter$history, updates)
     is.string <- sapply(df, is.character)
@@ -75,7 +77,7 @@ getvars <- function (formula, dbconnection, tables, db.only = TRUE, updates = NU
 
 updatesInfilter <-
 	function (varlist, updates) {
-		if (is.null(updates)) 
+		if (is.null(updates))
 			return(list(varlist = varlist))
 		n <- length(updates)
 		v <- vector("list", n)
@@ -83,7 +85,7 @@ updatesInfilter <-
 			if (any(idx <- (varlist %in% names(updates[[i]])))) {
 				v[[i]] <- varlist[idx]
 				ups <- match(v[[i]], names(updates[[i]]))
-				varlist <- unique(c(varlist[!idx], do.call(c, lapply(updates[[i]][ups], 
+				varlist <- unique(c(varlist[!idx], do.call(c, lapply(updates[[i]][ups],
 					"[[", "inputs"))))
 			}
 		}
@@ -92,9 +94,9 @@ updatesInfilter <-
 
 updatesOutfilter <-
 	function (df, varlist, history, updates) {
-		if (is.null(updates)) 
+		if (is.null(updates))
 			return(df)
-		if (all(sapply(history, length) == 0)) 
+		if (all(sapply(history, length) == 0))
 			return(df)
 		n <- length(updates)
 		for (i in 1:n) {
@@ -102,7 +104,7 @@ updatesOutfilter <-
 				outputs <- vector("list", mi)
 				for (j in 1:mi) {
 					idx.j <- match(history[[i]][j], names(updates[[i]]))
-					outputs[[j]] <- eval(updates[[i]][[idx.j]]$expression, 
+					outputs[[j]] <- eval(updates[[i]][[idx.j]]$expression,
 					  df)
 				}
 				names(outputs) <- history[[i]]
@@ -115,7 +117,7 @@ updatesOutfilter <-
 		df[, names(df) %in% varlist, drop = FALSE]
 	}
 
-	
+
 model.frame.survey.design<-function(formula,...,drop=TRUE){
   formula$variables
 }
@@ -157,12 +159,12 @@ within_function_subset.survey.design <-
 within_function_subset.DBIsvydesign <-
 	function (x, subset, ...){
 		e <- substitute(subset)
-		
+
 		vars_to_keep <- unique( c( all.vars(e) , names( x$variables ) ) )
-		
-		x$variables <- getvars(formula(paste("~", paste(vars_to_keep, collapse = "+"))), x$db$connection, 
+
+		x$variables <- getvars(formula(paste("~", paste(vars_to_keep, collapse = "+"))), x$db$connection,
 			x$db$tablename, updates = x$updates, subset = x$subset)
-			
+
 		r <- eval(e, x$variables, parent.frame())
 		r <- r & !is.na(r)
 		x <- x[r, ]
@@ -171,20 +173,20 @@ within_function_subset.DBIsvydesign <-
 	}
 
 
-	
-	
-	
-	
+
+
+
+
 
 # convey.design update method
 #' @method update convey.design
 #' @export
 update.convey.design <-
   function (object, ...) {
-  
+
 	attr( object , "full_design" ) <- NextMethod("update" , attr( object , "full_design" ) )
-  
+
     NextMethod("update", object)
-	
+
   }
 
