@@ -9,8 +9,9 @@
 #' @param na.rm Should cases with missing values be dropped?
 #' @param deff Return the design effect (see \code{survey::svymean})
 #' @param linearized Should a matrix of linearized variables be returned
+#' @param influence Should a matrix of (weighted) influence functions be returned? (for compatibility with \code{\link[survey]{survey}})
 #' @param return.replicates Return the replicate estimates?
-#' @param ... arguments passed on to `survey::svyquantile`
+#' @param ... future expansion. not used.`
 #'
 #' @details you must run the \code{convey_prep} function on your survey design object immediately after creating it with the \code{svydesign} or \code{svrepdesign} function.
 #'
@@ -95,7 +96,7 @@ svyiqalpha <-
 #' @rdname svyiqalpha
 #' @export
 svyiqalpha.survey.design <-
-  function(formula, design, alpha, na.rm=FALSE, deff= FALSE , linearized = FALSE , ...) {
+  function(formula, design, alpha=.5, na.rm=FALSE, deff= FALSE , linearized = FALSE , influence = FALSE , ...) {
 
     # collect data
     incvar <- model.frame(formula, design$variables, na.action = na.pass)[[1]]
@@ -154,8 +155,9 @@ svyiqalpha.survey.design <-
     class(rval) <- c( "cvystat" , "svystat" )
     attr(rval, "var") <- variance
     attr(rval, "statistic") <- "quantile"
-    if ( linearized ) attr(rval,"linearized") <- lin
-    if ( linearized ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
+    if ( linearized ) attr( rval , "linearized" ) <- lin
+    if ( influence )  attr( rval , "influence" )  <- sweep( lin , 1 , design$prob[ is.finite( design$prob ) ] , "/" )
+    if ( linearized | influence ) attr( rval , "index" ) <- as.numeric( rownames( lin ) )
     if ( is.character(deff) || deff) attr( rval , "deff") <- deff.estimate
     rval
 
@@ -165,7 +167,7 @@ svyiqalpha.survey.design <-
 #' @export
 #'
 svyiqalpha.svyrep.design <-
-  function(formula, design, alpha, na.rm=FALSE, deff = FALSE , linearized = FALSE , return.replicates = FALSE , ...) {
+  function(formula, design, alpha=.5, na.rm=FALSE, deff = FALSE , linearized = FALSE , return.replicates = FALSE , ...) {
 
     # check for convey_prep
     if (is.null(attr(design, "full_design"))) stop("you must run the ?convey_prep function on your replicate-weighted survey design object immediately after creating it with the svrepdesign() function.")
