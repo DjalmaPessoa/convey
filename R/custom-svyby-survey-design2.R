@@ -2,10 +2,11 @@
 #' @export
 svyby.survey.design2 <-
   function (formula, by, design, FUN, ..., deff = FALSE, keep.var = TRUE,
-            keep.names = TRUE, verbose = FALSE, vartype = c("se", "ci", "ci", "cv", "cvpct", "var"), drop.empty.groups = TRUE,
+            keep.names = TRUE, verbose = FALSE, vartype = c("se", "ci",
+                                                            "ci", "cv", "cvpct", "var"), drop.empty.groups = TRUE,
             covmat = FALSE, influence = covmat, na.rm.by = FALSE, na.rm.all = FALSE,
-            multicore = getOption("survey.multicore")) {
-    if ( is.null( attr( design , "full_design" ) ) ) attr( design , "full_design" ) <- design
+            multicore = getOption("survey.multicore"))
+  {
     if (inherits(by, "formula"))
       byfactors <- model.frame(by, model.frame(design), na.action = na.pass)
     else byfactors <- as.data.frame(by)
@@ -69,25 +70,26 @@ svyby.survey.design2 <-
             r <- FUN(data, design[byfactor %in% byfactor[i],
             ], deff = deff, ...)
           }
-          if ( is.null( attr(r, "index") ) ) attr(r, "index") <- idx
+          if ( is.null( attr(r, "index") ) ) attr( r, "index" ) <- idx
           r
         })
       rval <- t(sapply(results, unwrap))
-      if (covmat || influence) {
+      if ( covmat || influence) {
         infs <- lapply(results, attr, "influence")
         idxs <- lapply(results, attr, "index")
-        if (all(sapply(infs, is.null)))
-          stop("FUN does not return influence functions")
-        inflmats <- vector("list", length(infs) )
+        if (!all(sapply(idxs, is.logical))) idxs <- lapply( idxs, function( id ) rownames( design$allprob ) %in% id )
+        if (all(sapply(infs, is.null))) stop("FUN does not return influence functions")
+        inflmats <- vector("list", length(infs))
         for (i in seq_along(infs)) {
-          inflmats[[i]] <- matrix(0, ncol = NCOL(infs[[i]]), nrow = nrow( attr( design , "full_design" )$variables ) )
+          inflmats[[i]] <- matrix(0, ncol = NCOL(infs[[i]]), nrow = length(idxs[[i]]))
           inflmats[[i]][idxs[[i]], ] <- infs[[i]]
         }
         inflmat <- do.call(cbind, inflmats)
-        covmat.mat <- survey::svyrecvar(inflmat, attr( design , "full_design" )$cluster,
-                                attr( design , "full_design" )$strata, attr( design , "full_design" )$fpc, postStrata = attr( design , "full_design" )$postStrata)
+        rownames( inflmat ) <- rownames( design$allprob )
       }
-      else {
+      if ( covmat ){
+        covmat.mat <- svyrecvar(inflmat, design$cluster, design$strata, design$fpc, postStrata = design$postStrata)
+      } else {
         covmats <- lapply(results, vcov)
         ncovmat <- sum(sapply(covmats, ncol))
         covmat.mat <- matrix(0, ncol = ncovmat, nrow = ncovmat)
@@ -98,8 +100,7 @@ svyby.survey.design2 <-
           j <- j + ni
         }
       }
-    }
-    else {
+    } else {
       unwrap2 <- function(x) {
         if (!is.null(attr(x, "deff")))
           c(statistic = unclass(x), DEff = deff(x))
@@ -118,8 +119,7 @@ svyby.survey.design2 <-
         rval <- t(rval)
     }
     nr <- NCOL(rval)
-    nstats <- nr/(1 + keep.var * (length(vartype) + ("ci" %in%
-                                                       vartype)) + hasdeff)
+    nstats <- nr/(1 + keep.var * (length(vartype) + ("ci" %in% vartype)) + hasdeff)
     if (nr > 1)
       rval <- cbind(byfactors[uniques, , drop = FALSE], rval)
     else rval <- cbind(byfactors[uniques, , drop = FALSE], statistic = rval)
@@ -168,10 +168,8 @@ svyby.survey.design2 <-
                                 vartype = vartype)
     if (!keep.names)
       rownames(rval) <- 1:NROW(rval)
-    if (covmat)
-      attr(rval, "var") <- covmat.mat
-    if (influence)
-      attr(rval, "influence") <- inflmat
+    if (covmat) attr(rval, "var") <- covmat.mat
+    if (influence) attr(rval, "influence") <- inflmat
     attr(rval, "call") <- sys.call()
     class(rval) <- c("svyby", "data.frame")
     rval

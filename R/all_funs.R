@@ -363,5 +363,45 @@ svyby.convey.design <-
     class(design) <- setdiff(class(design), "convey.design")
     class(design) <- setdiff(class(design), "DBIsvydesign")
 
-    survey::svyby(formula,by,design,...)
+    # method is unchanged for svyrep.design
+    if ( "svyrep.design" %in% class( design ) ) {
+      return( survey::svyby( formula , by, design , ... ) )
+    }
+
+    # method is unchanged for survey.design2 and !covmat
+    if ( "survey.design" %in% class( design ) && ( is.null( list(...)[["covmat"]] ) || isFALSE( list(...)[["covmat"]] ) ) ) {
+      return( survey::svyby( formula , by, design , ... ) )
+    }
+
+    # method is changes for survey.design2 and covmat
+    if ( "survey.design2" %in% class( design ) && ( isTRUE( list(...)[["covmat"]] ) ) ) {
+      custom.svyby <- function(formula , by , design , ... ) {
+        dots <- list(...)
+        FUN <- dots[ sapply( dots , is.function ) ][[1]]
+        dots <- dots[ !sapply( dots , is.function ) ]
+        dots$covmat <- FALSE
+        dots$influence <- TRUE
+        # do.call( survey:::svyby.survey.design2 , c( list( formula = formula , by = by , design = design , FUN = FUN ) , dots ) ) # survey's svyby.survey.design2
+        do.call( convey:::svyby.survey.design2 , c( list( formula = formula , by = by , design = design , FUN = FUN ) , dots ) ) # convey custom svyby.survey.design2
+      }
+
+      # evaluate without covmat matrix
+      rval <- custom.svyby( formula , by, design , ... )
+
+      # collect influence functions
+      inflmat <- attr( rval , "influence" )
+      inflmat.full <- matrix( 0 , nrow = nrow( attr( design , "full_design")$variables ) , ncol = ncol( inflmat ) )
+      inflmat.full[ rownames( attr( design , "full_design")$variables ) %in% rownames( inflmat ) , ] <- inflmat
+
+      # compute covariance matrix
+      covmat.mat <- survey::svyrecvar( inflmat.full , attr( design , "full_design" )$cluster, attr( design , "full_design" )$strata, attr( design , "full_design" )$fpc, postStrata = attr( design , "full_design" )$postStrata)
+
+      # add covariance matrix
+      attr( rval, "var" ) <- covmat.mat
+
+      # return result
+      return( rval )
+
+    }
+
   }
