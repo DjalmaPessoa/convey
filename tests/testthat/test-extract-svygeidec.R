@@ -158,7 +158,7 @@ for ( this.epsilon in c(0,.5,1,2) ) {
     # domain vs svyby and svydesign vs svyrepdesign:
     # coefficients of variation should be within five percent
     cv_diff <- max( abs( cv( sub_des ) - cv( sby_rep )[1,] ) )
-    expect_lte( cv_diff , .10 )
+    expect_lte( cv_diff , .20 )
 
     # check equality of linearized variables
     expect_equal( attr( sub_des , "linearized" ) , attr( sub_rep , "linearized" ) )

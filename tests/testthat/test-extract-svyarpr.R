@@ -6,7 +6,7 @@ library( testthat )
 # library( vardpoor )
 
 # return test context
-context( "arpr output survey.design and svyrep.design" )
+context( "svyarpr output survey.design and svyrep.design" )
 
 ### test 1: test if funtion works on unweighted objects
 
